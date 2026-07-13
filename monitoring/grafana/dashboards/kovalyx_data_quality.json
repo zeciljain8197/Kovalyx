@@ -1,0 +1,90 @@
+{
+  "uid": "kovalyx-data-quality",
+  "title": "Kovalyx — Data Quality",
+  "tags": ["kovalyx"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "GE Checkpoints Passing",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(kovalyx_ge_checkpoint_success)" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "GE Expectations Passed by Checkpoint",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_ge_expectations_passed_total", "legendFormat": "{{checkpoint_name}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "GE Expectations Failed by Checkpoint",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_ge_expectations_failed_total", "legendFormat": "{{checkpoint_name}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "red" } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "GE Pass Rate Over Time",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_ge_checkpoint_success", "legendFormat": "{{checkpoint_name}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Silver Records Failed (null key drops)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_silver_records_failed_total" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "GE Checkpoint Runner Logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "kovalyx-loki" },
+      "targets": [
+        { "refId": "A", "expr": "{container=\"kovalyx-quality-1\"}" }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending" }
+    }
+  ]
+}

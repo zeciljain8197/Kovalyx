@@ -1,0 +1,21 @@
+kovalyx:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_PG_HOST') }}"
+      port: "{{ env_var('DBT_PG_PORT', '5432') | int }}"
+      database: "{{ env_var('DBT_PG_DATABASE') }}"
+      user: "{{ env_var('DBT_PG_USER') }}"
+      password: "{{ env_var('DBT_PG_PASSWORD') }}"
+      schema: staging
+      threads: 4
+    prod:
+      type: postgres
+      host: "{{ env_var('DBT_PG_HOST') }}"
+      port: "{{ env_var('DBT_PG_PORT', '5432') | int }}"
+      database: "{{ env_var('DBT_PG_DATABASE') }}"
+      user: "{{ env_var('DBT_PG_USER') }}"
+      password: "{{ env_var('DBT_PG_PASSWORD') }}"
+      schema: staging
+      threads: 8

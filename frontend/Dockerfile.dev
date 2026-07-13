@@ -1,0 +1,17 @@
+# Dev-mode image for the frontend service in docker-compose.yml (profile
+# "full"). Not used in production — Vercel builds directly from the repo
+# there. node_modules and .next are anonymous volumes in docker-compose.yml
+# (`/app/node_modules`, `/app/.next`) so the host bind mount of ./frontend
+# doesn't shadow what's installed/built inside the container.
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

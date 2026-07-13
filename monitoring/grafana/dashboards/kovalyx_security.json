@@ -1,0 +1,93 @@
+{
+  "uid": "kovalyx-security",
+  "title": "Kovalyx — Security & Privacy",
+  "tags": ["kovalyx"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "PII Events Masked (Total)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_silver_pii_events_masked_total" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "blue" } },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "PII Masking Rate Over Time",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(kovalyx_silver_pii_events_masked_total[1h])" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Vault Status",
+      "description": "prometheus.yml does not currently define a Vault scrape target — Vault's telemetry stanza isn't enabled in vault/vault-config.hcl, so this panel shows 'No data' until that's wired up in a future infra pass.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "up{job=~\".*vault.*\"}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Vault Audit Logs",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "loki", "uid": "kovalyx-loki" },
+      "targets": [
+        { "refId": "A", "expr": "{container=\"kovalyx-vault-1\"}" }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending" }
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "PII Masking Logs (Silver Transform)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "kovalyx-loki" },
+      "targets": [
+        { "refId": "A", "expr": "{container=~\"kovalyx-spark.*\"} |~ \"(?i)(pii|mask|presidio)\"" }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending" }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Producer/Consumer Errors (potential data leaks)",
+      "description": "Spikes here warrant investigation for incomplete masking — a producer/consumer error can indicate a malformed event that bypassed downstream validation.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(kovalyx_producer_errors_total[5m])", "legendFormat": "producer" },
+        { "refId": "B", "expr": "rate(kovalyx_consumer_errors_total[5m])", "legendFormat": "consumer" }
+      ]
+    }
+  ]
+}

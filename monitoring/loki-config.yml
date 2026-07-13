@@ -1,0 +1,40 @@
+# =====================================================================
+# Kovalyx — Loki log-aggregation config. Mounted into the `loki` service
+# at /etc/loki/local-config.yaml (docker-compose.yml); single-binary,
+# filesystem-backed — sized for a self-hosted single-node deployment,
+# not a distributed cluster.
+# =====================================================================
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /tmp/loki
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 7 days — matches the MinIO bronze bucket's ILM expiry policy
+  # (docker-compose.yml minio-init: `mc ilm add --expiry-days 7`), so log
+  # retention doesn't outlive the raw data it describes.
+  retention_period: 168h

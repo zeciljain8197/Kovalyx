@@ -1,0 +1,24 @@
+# =====================================================================
+# Kovalyx — Grafana datasource auto-provisioning.
+# Mounted at /etc/grafana/provisioning (docker-compose.yml), picked up
+# automatically on Grafana startup.
+# =====================================================================
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: kovalyx-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: "15s"
+
+  - name: Loki
+    uid: kovalyx-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000

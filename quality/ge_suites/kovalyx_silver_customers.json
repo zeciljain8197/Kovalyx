@@ -1,0 +1,18 @@
+{
+  "data_asset_name": "kovalyx_silver_customers",
+  "expectation_suite_name": "kovalyx.silver_customers",
+  "expectations": [
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "customer_id"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "tier"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "registration_date"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_unique", "kwargs": {"column": "customer_id"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_in_set", "kwargs": {"column": "tier", "value_set": ["bronze", "silver", "gold"]}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_between", "kwargs": {"column": "total_spent", "min_value": 0, "max_value": 1000000}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "hashed_email"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_match_regex", "kwargs": {"column": "hashed_email", "regex": "^[a-f0-9]{64}$"}, "meta": {}}
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19"
+  }
+}

@@ -1,0 +1,93 @@
+version: 2
+
+# Source table names match the REAL tables in scripts/supabase_schema.sql
+# (staging.events/customers/products/orders/inventory — no stg_/_raw
+# naming). See the Session 3 plan's Pre-check 1 for the full writeup:
+# these tables predate the Session 2 bronze-contract rewrite, so several
+# columns the current Silver output produces have no home here at all.
+# The stg_*.sql models below are the translation layer that exposes clean,
+# canonical column names to every downstream dimension/fact/mart model,
+# filling genuinely-missing columns with typed NULLs rather than
+# fabricating values.
+sources:
+  - name: kovalyx_staging
+    schema: staging
+    freshness:
+      warn_after: {count: 3, period: hour}
+      error_after: {count: 6, period: hour}
+    loaded_at_field: _silver_loaded_at
+    tables:
+      - name: events
+        description: "Raw streaming events loaded by scripts/silver_to_postgres_loader.py"
+        columns:
+          - name: event_id
+          - name: event_type
+          - name: event_timestamp
+          - name: customer_id
+          - name: order_id
+          - name: product_id
+          - name: sku
+          - name: quantity
+          - name: order_amount
+          - name: payment_method
+          - name: shipping_carrier
+          - name: return_reason
+          - name: inventory_delta
+          - name: _silver_loaded_at
+
+      - name: customers
+        description: "Raw customer records loaded by scripts/silver_to_postgres_loader.py"
+        columns:
+          - name: customer_id
+          - name: full_name
+          - name: email_hash
+          - name: phone_masked
+          - name: city
+          - name: state
+          - name: postal_code
+          - name: country
+          - name: customer_tier
+          - name: registered_at
+          - name: _silver_loaded_at
+
+      - name: products
+        description: "Raw product catalog loaded by scripts/silver_to_postgres_loader.py"
+        columns:
+          - name: product_id
+          - name: sku
+          - name: product_name
+          - name: category
+          - name: unit_price
+          - name: cost_price
+          - name: reorder_point
+          - name: created_at
+          - name: _silver_loaded_at
+
+      - name: orders
+        description: "Raw orders loaded by scripts/silver_to_postgres_loader.py"
+        columns:
+          - name: order_id
+          - name: order_line_id
+          - name: customer_id
+          - name: product_id
+          - name: sku
+          - name: quantity
+          - name: unit_price
+          - name: order_amount
+          - name: order_date
+          - name: order_status
+          - name: payment_method
+          - name: shipping_carrier
+          - name: return_reason
+          - name: _silver_loaded_at
+
+      - name: inventory
+        description: "Raw daily inventory snapshots loaded by scripts/silver_to_postgres_loader.py"
+        columns:
+          - name: snapshot_date
+          - name: product_id
+          - name: sku
+          - name: quantity_on_hand
+          - name: reorder_point
+          - name: warehouse_region
+          - name: _silver_loaded_at

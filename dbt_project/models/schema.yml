@@ -1,0 +1,187 @@
+version: 2
+
+models:
+  # --------------------------------------------------------------
+  # Staging
+  # --------------------------------------------------------------
+  - name: stg_events
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: event_type
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - order_placed
+                - item_added_to_cart
+                - payment_processed
+                - order_shipped
+                - order_delivered
+                - order_returned
+                - inventory_updated
+                - customer_registered
+      - name: customer_id
+        tests: [not_null]
+
+  - name: stg_customers
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: tier
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['bronze', 'silver', 'gold']
+
+  - name: stg_products
+    columns:
+      - name: product_id
+        tests: [not_null, unique]
+      - name: product_name
+        tests: [not_null]
+      - name: category
+        tests: [not_null]
+
+  - name: stg_orders
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests: [not_null]
+      - name: product_id
+        tests: [not_null]
+      - name: order_amount
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['placed', 'paid', 'shipped', 'delivered', 'returned']
+
+  - name: stg_inventory
+    columns:
+      - name: product_id
+        tests: [not_null]
+      - name: inventory_date
+        tests: [not_null]
+      - name: stock_level
+        tests: [not_null]
+
+  # --------------------------------------------------------------
+  # Dimensions
+  # --------------------------------------------------------------
+  - name: dim_customers
+    columns:
+      - name: customer_key
+        tests: [not_null, unique]
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: tier
+        tests:
+          - accepted_values:
+              values: ['bronze', 'silver', 'gold']
+
+  - name: dim_products
+    columns:
+      - name: product_key
+        tests: [not_null, unique]
+      - name: product_id
+        tests: [not_null, unique]
+
+  - name: dim_date
+    columns:
+      - name: date_key
+        tests: [not_null, unique]
+      - name: full_date
+        tests: [not_null]
+      - name: day_of_week
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5, 6, 7]
+      - name: quarter
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]
+
+  # --------------------------------------------------------------
+  # Facts
+  # --------------------------------------------------------------
+  - name: fact_orders
+    columns:
+      - name: order_key
+        tests: [not_null, unique]
+      - name: order_id
+        tests: [not_null]
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_key
+      - name: product_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: product_key
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+  - name: fact_inventory_snapshots
+    columns:
+      - name: snapshot_key
+        tests: [not_null, unique]
+      - name: product_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: product_key
+      - name: date_key
+        tests: [not_null]
+
+  - name: fact_events
+    columns:
+      - name: event_key
+        tests: [not_null, unique]
+      - name: event_id
+        tests: [not_null, unique]
+      - name: customer_key
+        tests: [not_null]
+
+  # --------------------------------------------------------------
+  # Reporting marts
+  # --------------------------------------------------------------
+  - name: mart_sales_summary
+    columns:
+      - name: period_date
+        tests: [not_null]
+      - name: category
+        tests: [not_null]
+
+  - name: mart_inventory_alerts
+    columns:
+      - name: product_id
+        tests: [not_null, unique]
+      - name: alert_level
+        tests:
+          - accepted_values:
+              values: ['red', 'yellow', 'green']
+
+  - name: mart_return_rates
+    columns:
+      - name: product_id
+        tests: [not_null]
+      - name: period_date
+        tests: [not_null]
+
+  - name: mart_customer_cohorts
+    columns:
+      - name: cohort_week
+        tests: [not_null]
+      - name: weeks_since_acquisition
+        tests: [not_null]

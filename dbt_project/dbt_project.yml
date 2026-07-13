@@ -1,0 +1,55 @@
+name: 'kovalyx'
+version: '1.0.0'
+config-version: 2
+profile: 'kovalyx'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  kovalyx:
+    staging:
+      +schema: staging
+      +materialized: view
+    marts:
+      dimensions:
+        +schema: marts
+        +materialized: table
+      facts:
+        +schema: marts
+        +materialized: table
+      reporting:
+        +schema: marts
+        +materialized: table
+
+snapshots:
+  kovalyx:
+    +target_schema: marts
+    +strategy: check
+    +unique_key: customer_id
+    +check_cols:
+      - tier
+      - shipping_address
+
+vars:
+  kovalyx_start_date: '2024-01-01'
+
+# marts.apply_analytics_rls()/apply_pipeline_writer_rls()/apply_anon_rls()
+# (see scripts/supabase_schema.sql) attach RLS + per-role policies to
+# every marts.dim_/fact_/mart_ table dbt creates — they can't run until
+# those tables exist, so this on-run-end hook re-applies them after every
+# `dbt run` instead of requiring a manual step. All three functions are
+# idempotent (DROP POLICY IF EXISTS before CREATE), safe to call every run.
+# apply_anon_rls() was added in the Session 5 supabase_schema.sql
+# migration (anon-role access for the public Next.js dashboard) but
+# wasn't wired in here yet at the time — this closes that gap.
+on-run-end:
+  - "SELECT marts.apply_analytics_rls()"
+  - "SELECT marts.apply_pipeline_writer_rls()"
+  - "SELECT marts.apply_anon_rls()"

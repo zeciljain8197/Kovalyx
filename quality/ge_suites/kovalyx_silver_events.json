@@ -1,0 +1,46 @@
+{
+  "data_asset_name": "kovalyx_silver_events",
+  "expectation_suite_name": "kovalyx.silver_events",
+  "expectations": [
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "event_id"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "event_type"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "event_timestamp"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "order_id"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "customer_id"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "product_id"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "order_amount"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "quantity"}, "meta": {}},
+    {"expectation_type": "expect_column_to_exist", "kwargs": {"column": "ingestion_date"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "event_id"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "event_type"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "event_timestamp"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "order_id"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "customer_id"}, "meta": {}},
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "event_type",
+        "value_set": [
+          "order_placed",
+          "item_added_to_cart",
+          "payment_processed",
+          "order_shipped",
+          "order_delivered",
+          "order_returned",
+          "inventory_updated",
+          "customer_registered"
+        ]
+      },
+      "meta": {}
+    },
+    {"expectation_type": "expect_column_values_to_be_between", "kwargs": {"column": "order_amount", "min_value": 0.01, "max_value": 50000}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_between", "kwargs": {"column": "quantity", "min_value": 1, "max_value": 1000}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_unique", "kwargs": {"column": "event_id"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_match_regex", "kwargs": {"column": "hashed_email", "regex": "^[a-f0-9]{64}$"}, "meta": {}},
+    {"expectation_type": "expect_table_row_count_to_be_between", "kwargs": {"min_value": 1, "max_value": 10000000}, "meta": {}}
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19"
+  }
+}

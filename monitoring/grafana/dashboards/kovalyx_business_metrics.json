@@ -1,0 +1,63 @@
+{
+  "uid": "kovalyx-business-metrics",
+  "title": "Kovalyx — Business Metrics",
+  "tags": ["kovalyx"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "ℹ️ **Business KPIs** (GMV, customer cohorts, inventory alerts) live on the Kovalyx Vercel dashboard (kovalyx.vercel.app), queried directly from Supabase marts. This dashboard shows **pipeline throughput** metrics only, not aggregated business KPIs."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Events Produced (all time)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_events_produced_total" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Events by Type",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_events_produced_total", "legendFormat": "{{event_type}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Loader Records Written Over Time",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_loader_records_written_total", "legendFormat": "{{table}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "End-to-End Pipeline Throughput",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(kovalyx_events_produced_total[1h])", "legendFormat": "events in" },
+        { "refId": "B", "expr": "rate(kovalyx_loader_records_written_total[1h])", "legendFormat": "records out" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,151 @@
+{
+  "uid": "kovalyx-pipeline-health",
+  "title": "Kovalyx — Pipeline Health",
+  "tags": ["kovalyx"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Last Pipeline Run Status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "up{job=\"kovalyx-pushgateway\"}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Events Produced (by type)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(kovalyx_events_produced_total[5m])", "legendFormat": "{{event_type}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Events Consumed",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(kovalyx_events_consumed_total[5m])" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Silver Records Processed (by table)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_silver_records_processed_total", "legendFormat": "{{table}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Silver Records Failed",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_silver_records_failed_total" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Silver Job Duration",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_silver_job_duration_seconds" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Loader Records Written (by table)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_loader_records_written_total", "legendFormat": "{{table}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Kafka Consumer Errors",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "kovalyx-prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "kovalyx_consumer_errors_total" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "logs",
+      "title": "Airflow Scheduler Logs (last 100 lines)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "loki", "uid": "kovalyx-loki" },
+      "targets": [
+        { "refId": "A", "expr": "{container=\"kovalyx-airflow-scheduler-1\"}" }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending" }
+    },
+    {
+      "id": 10,
+      "type": "logs",
+      "title": "Silver Transform Logs",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "loki", "uid": "kovalyx-loki" },
+      "targets": [
+        { "refId": "A", "expr": "{container=~\"kovalyx-spark.*\"}" }
+      ],
+      "options": { "showTime": true, "sortOrder": "Descending" }
+    }
+  ]
+}

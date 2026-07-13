@@ -1,0 +1,82 @@
+# =====================================================================
+# Kovalyx — Prometheus scrape configuration.
+#
+# Mounted read-only into the `prometheus` service at
+# /etc/prometheus/prometheus.yml (see docker-compose.yml). Prometheus is
+# a member of all three Docker networks (bronze/silver/gold), so every
+# target below is reachable by its Compose service name.
+# =====================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: kovalyx
+    environment: dev
+
+scrape_configs:
+  # kafka JMX (port 9101 per docker-compose.yml, not the 9999 a generic
+  # spec would assume) has no Prometheus-format exporter attached to it.
+  # docker-compose.yml already runs a dedicated `kafka-exporter` service
+  # (danielqsj/kafka-exporter) that translates Kafka's native metrics to
+  # Prometheus text format on port 9308 — scrape that instead of trying
+  # to speak JMX directly.
+  - job_name: kovalyx-kafka
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+
+  - job_name: kovalyx-producer
+    static_configs:
+      - targets: ["kafka-producer:8000"]
+    metrics_path: /metrics
+
+  - job_name: kovalyx-consumer
+    static_configs:
+      - targets: ["kafka-consumer:8001"]
+    metrics_path: /metrics
+
+  - job_name: kovalyx-minio
+    scheme: http
+    metrics_path: /minio/v2/metrics/cluster
+    static_configs:
+      - targets: ["minio:9000"]
+
+  # Airflow metrics: docker-compose.yml already wires
+  # AIRFLOW__METRICS__STATSD_ON=true against a `statsd-exporter` sidecar
+  # (prom/statsd-exporter, port 9102), which is the real, already-running
+  # path to Airflow metrics in this stack — scrape the exporter rather
+  # than /admin/metrics on the webserver, which requires the separate
+  # airflow-prometheus-exporter plugin that isn't installed here.
+  - job_name: kovalyx-airflow
+    static_configs:
+      - targets: ["statsd-exporter:9102"]
+
+  # Requires Spark's Prometheus metrics servlet (metrics.properties with
+  # *.sink.prometheusServlet.class=...) to be enabled on spark-master;
+  # scraped optimistically per spec — target will simply report down
+  # until that servlet config is added in a future infra pass.
+  - job_name: kovalyx-spark
+    static_configs:
+      - targets: ["spark-master:8080"]
+    metrics_path: /metrics/master/prometheus/
+
+  # Collects Silver transform, GE checkpoint, and loader metrics pushed
+  # at job completion (see PROMETHEUS_PUSHGATEWAY_URL in .env.example).
+  # NOTE: docker-compose.yml does not yet define a `pushgateway` service
+  # — this job is added proactively and will show the target as down
+  # until that service is wired up in a future infrastructure pass.
+  - job_name: kovalyx-pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]
+
+  # Self-scrape for Prometheus health monitoring.
+  - job_name: kovalyx-prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+    metrics_path: /metrics
+
+  - job_name: kovalyx-loki
+    static_configs:
+      - targets: ["loki:3100"]
+    metrics_path: /metrics

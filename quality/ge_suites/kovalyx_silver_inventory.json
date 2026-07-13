@@ -1,0 +1,15 @@
+{
+  "data_asset_name": "kovalyx_silver_inventory",
+  "expectation_suite_name": "kovalyx.silver_inventory",
+  "expectations": [
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "product_id"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "date"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_not_be_null", "kwargs": {"column": "stock_level"}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_between", "kwargs": {"column": "stock_level", "min_value": 0, "max_value": 1000000}, "meta": {}},
+    {"expectation_type": "expect_column_values_to_be_between", "kwargs": {"column": "units_sold", "min_value": 0, "max_value": 100000}, "meta": {}}
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19"
+  }
+}

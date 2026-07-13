@@ -1,0 +1,59 @@
+# Secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+vault/.vault-init.json
+vault/.approle-credentials.json
+nginx/certs/*
+!nginx/certs/.gitkeep
+profiles.yml
+dbt_project/profiles.yml
+frontend/.env*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# dbt
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+
+# Great Expectations
+quality/great_expectations/uncommitted/
+
+# Airflow
+airflow/logs/
+airflow/*.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/npm-debug.log*
+
+# Streamlit
+streamlit_monitor/.streamlit/secrets.toml
+
+# Data / local dev artifacts
+data/
+*.parquet
+*.csv.gz
+scratch/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
