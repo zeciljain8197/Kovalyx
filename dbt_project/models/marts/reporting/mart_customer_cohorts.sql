@@ -30,12 +30,17 @@ cohort_size AS (
 retention AS (
     SELECT
         cb.cohort_week,
-        EXTRACT(WEEK FROM (oa.order_week - cb.cohort_week))::INT AS weeks_since_acquisition,
+        -- Postgres's EXTRACT(WEEK FROM ...) only supports timestamp/date,
+        -- not the INTERVAL this subtraction produces — extracting DAY and
+        -- dividing by 7 works because both sides are already week-aligned
+        -- via DATE_TRUNC('week', ...), so the difference is always an
+        -- exact multiple of 7 days.
+        (EXTRACT(DAY FROM (oa.order_week - cb.cohort_week)) / 7)::INT AS weeks_since_acquisition,
         COUNT(DISTINCT oa.customer_id)                            AS active_customers
     FROM cohort_base cb
     JOIN order_activity oa ON cb.customer_id = oa.customer_id
     WHERE oa.order_week >= cb.cohort_week
-    GROUP BY cb.cohort_week, EXTRACT(WEEK FROM (oa.order_week - cb.cohort_week))::INT
+    GROUP BY cb.cohort_week, (EXTRACT(DAY FROM (oa.order_week - cb.cohort_week)) / 7)::INT
 )
 
 SELECT

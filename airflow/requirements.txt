@@ -18,7 +18,17 @@ prometheus-client==0.20.0
 boto3==1.34.131
 python-json-logger==2.0.7
 jsonschema==4.22.0
-pandas==2.2.2
+# 2.1.4, not 2.2.2: pandas>=2.2's to_sql()/read_sql() fail to recognize a
+# SQLAlchemy 1.4.x Connection/Engine as connectable at all ("pandas only
+# supports SQLAlchemy connectable... Other DBAPI2 objects are not
+# tested"), then crash with AttributeError: 'Connection' object has no
+# attribute 'cursor' — a real pandas 2.2.x regression against
+# SQLAlchemy 1.4.x (which Airflow 2.9.3 itself pins,
+# sqlalchemy<2.0,>=1.4.36, so upgrading SQLAlchemy instead isn't an
+# option). This also matches what apache-airflow-providers-snowflake/
+# google already wanted (pandas<2.2,>=2.1.2) but pip's non-strict
+# resolver let 2.2.2 install anyway.
+pandas==2.1.4
 pyarrow==16.1.0
 great-expectations==0.18.19
 # apache-airflow==2.9.3 pins sqlalchemy<2.0,>=1.4.36 — silver_to_postgres_loader.py's
