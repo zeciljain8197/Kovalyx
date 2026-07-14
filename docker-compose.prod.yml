@@ -59,6 +59,9 @@ x-airflow-common: &airflow-common
     VAULT_ADDR: http://vault:8200
     VAULT_TOKEN: ${VAULT_TOKEN}
     KOVALYX_MINIO_ENDPOINT: minio:9000
+    # See docker-compose.yml's matching comment — seed_data.py reads
+    # this name, not KOVALYX_MINIO_ENDPOINT.
+    MINIO_ENDPOINT: http://minio:9000
     KOVALYX_KAFKA_BOOTSTRAP: kafka:29092
     KOVALYX_SCHEMA_REGISTRY_URL: http://schema-registry:8081
     KOVALYX_ENV: production
@@ -112,6 +115,12 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      # See docker-compose.yml's matching comment — ruok is rejected by
+      # default in this ZooKeeper version unless explicitly whitelisted,
+      # and that requires the KAFKA_OPTS JVM system-property override,
+      # not the ZOOKEEPER_4LW_COMMANDS_WHITELIST env var (unsupported by
+      # this image's config template despite the plausible name).
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok,srvr,stat,mntr"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
@@ -126,6 +135,8 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     restart: always
+    # See docker-compose.yml's matching comment / kafka/generate_jaas_and_start.sh
+    entrypoint: ["bash", "/opt/kovalyx/generate_jaas_and_start.sh"]
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -138,6 +149,14 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: SASL_PLAINTEXT
       KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
       KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf"
+      # See docker-compose.yml's matching comment.
+      KAFKA_BROKER_USER: ${KAFKA_BROKER_USER}
+      KAFKA_BROKER_PASSWORD: ${KAFKA_BROKER_PASSWORD}
+      KAFKA_PRODUCER_USER: ${KAFKA_PRODUCER_USER}
+      KAFKA_PRODUCER_PASSWORD: ${KAFKA_PRODUCER_PASSWORD}
+      KAFKA_CONSUMER_USER: ${KAFKA_CONSUMER_USER}
+      KAFKA_CONSUMER_PASSWORD: ${KAFKA_CONSUMER_PASSWORD}
       KAFKA_LISTENER_NAME_SASL_PLAINTEXT_PLAIN_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.plain.PlainLoginModule required
         username="${KAFKA_BROKER_USER}"
@@ -149,10 +168,11 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     volumes:
       - kafka_data:/var/lib/kafka/data
+      - ./kafka/generate_jaas_and_start.sh:/opt/kovalyx/generate_jaas_and_start.sh:ro
     networks:
       - kovalyx_bronze_net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 || exit 1"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 --command-config /etc/kafka/kafka_client.properties || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -216,6 +236,14 @@ services:
       timeout: 5s
       retries: 10
 
+  # Standalone always-on producer/consumer for a live-demo experience
+  # without Airflow — see docker-compose.yml's matching comment. Gated
+  # behind profiles: ["jobs"] (opt-in only) here too: the
+  # kovalyx_medallion_pipeline DAG's kafka_producer_trigger/
+  # bronze_kafka_consumer tasks run these exact same scripts under the
+  # exact same Kafka consumer group, and running both unconditionally
+  # (as this file did previously, with no profiles key at all) means
+  # whichever one polls first drains the topic, starving the other.
   kafka-producer:
     build:
       context: ./ingestion
@@ -237,6 +265,7 @@ services:
         condition: service_healthy
     networks:
       - kovalyx_bronze_net
+    profiles: ["jobs"]
 
   kafka-consumer:
     build:
@@ -263,12 +292,16 @@ services:
         condition: service_healthy
     networks:
       - kovalyx_bronze_net
+    profiles: ["jobs"]
 
   # ------------------------------------------------------------------
   # SILVER LAYER
   # ------------------------------------------------------------------
   spark-master:
-    image: bitnami/spark:3.5.1
+    # See docker-compose.yml's matching comment — not the stock image.
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     restart: always
     environment:
       SPARK_MODE: master
@@ -278,13 +311,17 @@ services:
       - kovalyx_bronze_net
       - kovalyx_silver_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      # See docker-compose.yml's matching comment — no curl/wget in this image.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080', timeout=5)"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   spark-worker:
-    image: bitnami/spark:3.5.1
+    # See spark-master's matching comment.
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     restart: always
     environment:
       SPARK_MODE: worker
@@ -363,7 +400,9 @@ services:
       - kovalyx_silver_net
       - kovalyx_gold_net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8200/v1/sys/health?standbyok=true&sealedcode=200"]
+      # 127.0.0.1, not localhost — see docker-compose.yml's vault
+      # healthcheck comment (same "localhost" resolves to ::1 issue).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8200/v1/sys/health?standbyok=true&sealedcode=200"]
       interval: 10s
       timeout: 5s
       retries: 10

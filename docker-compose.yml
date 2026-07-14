@@ -40,6 +40,13 @@ x-airflow-common: &airflow-common
     VAULT_ADDR: http://vault:8200
     VAULT_TOKEN: ${VAULT_TOKEN}
     KOVALYX_MINIO_ENDPOINT: minio:9000
+    # Different scripts use different naming conventions for the same
+    # endpoint (silver_to_postgres_loader.py reads KOVALYX_MINIO_ENDPOINT
+    # above; seed_data.py/kafka_consumer.py read plain MINIO_ENDPOINT
+    # with a scheme prefix) — only the former was set here, so
+    # seed_data.py silently fell back to its http://localhost:9000
+    # default, which inside this container means itself, not minio.
+    MINIO_ENDPOINT: http://minio:9000
     KOVALYX_KAFKA_BOOTSTRAP: kafka:29092
     KOVALYX_SCHEMA_REGISTRY_URL: http://schema-registry:8081
     # The DAG's gold_dbt_run/gold_dbt_test/gold_dbt_snapshot tasks shell
@@ -86,6 +93,18 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      # ZooKeeper 3.8+ (bundled in this image) whitelists only `srvr`
+      # among its four-letter-word commands by default — `ruok`, which
+      # the healthcheck below needs, is rejected unless explicitly
+      # whitelisted, leaving the container permanently "unhealthy"
+      # despite actually running fine. ZOOKEEPER_4LW_COMMANDS_WHITELIST
+      # looks like it should work (matches the dotted zoo.cfg property
+      # name) but this image's zookeeper.properties.template doesn't
+      # actually translate it — verified by inspecting the template
+      # directly. The JVM system-property override via KAFKA_OPTS (read
+      # by zookeeper-server-start's underlying launcher) does work,
+      # confirmed against a throwaway container.
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok,srvr,stat,mntr"
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
@@ -100,6 +119,12 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: kovalyx-kafka
+    # Overrides the image's default entrypoint — see
+    # kafka/generate_jaas_and_start.sh for why (it writes the JAAS/client
+    # config files the image never generates itself, and skips the
+    # image's default `ensure` preflight step, which fails against a
+    # non-SASL ZooKeeper despite the broker itself starting up fine).
+    entrypoint: ["bash", "/opt/kovalyx/generate_jaas_and_start.sh"]
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -113,6 +138,16 @@ services:
       KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
       KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
       KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/kafka_server_jaas.conf"
+      # kafka/generate_jaas_and_start.sh needs these directly — they
+      # were previously only used as compose-level ${...} substitution
+      # tokens inside the JAAS_CONFIG strings below, never passed
+      # through to the container as their own env vars.
+      KAFKA_BROKER_USER: ${KAFKA_BROKER_USER}
+      KAFKA_BROKER_PASSWORD: ${KAFKA_BROKER_PASSWORD}
+      KAFKA_PRODUCER_USER: ${KAFKA_PRODUCER_USER}
+      KAFKA_PRODUCER_PASSWORD: ${KAFKA_PRODUCER_PASSWORD}
+      KAFKA_CONSUMER_USER: ${KAFKA_CONSUMER_USER}
+      KAFKA_CONSUMER_PASSWORD: ${KAFKA_CONSUMER_PASSWORD}
       KAFKA_LISTENER_NAME_SASL_PLAINTEXT_PLAIN_SASL_JAAS_CONFIG: >-
         org.apache.kafka.common.security.plain.PlainLoginModule required
         username="${KAFKA_BROKER_USER}"
@@ -135,10 +170,15 @@ services:
       - "127.0.0.1:9092:9092"
     volumes:
       - kafka_data:/var/lib/kafka/data
+      - ./kafka/generate_jaas_and_start.sh:/opt/kovalyx/generate_jaas_and_start.sh:ro
     networks:
       - kovalyx_bronze_net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 --command-config /etc/kafka/kafka_server_jaas.conf || exit 1"]
+      # --command-config needs a client properties file (security.protocol/
+      # sasl.mechanism/sasl.jaas.config), not the raw JAAS file the
+      # previous version of this check pointed at (which would never
+      # actually authenticate).
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 --command-config /etc/kafka/kafka_client.properties || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -210,7 +250,11 @@ services:
       retries: 10
 
   minio-init:
-    image: minio/mc:RELEASE.2024-06-11T02-25-16Z
+    # The originally-pinned RELEASE.2024-06-11T02-25-16Z tag has since
+    # been pruned from Docker Hub (minio/mc periodically removes old
+    # release tags) — this is the closest still-available tag to that
+    # era, confirmed pullable.
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
     container_name: kovalyx-minio-init
     depends_on:
       minio:
@@ -232,6 +276,17 @@ services:
       - kovalyx_bronze_net
       - kovalyx_silver_net
 
+  # Standalone always-on producer/consumer for a live-demo experience
+  # without Airflow. Deliberately NOT in the "full" profile: the
+  # kovalyx_medallion_pipeline DAG's kafka_producer_trigger/
+  # bronze_kafka_consumer tasks run these exact same scripts under the
+  # exact same Kafka consumer group (kovalyx-bronze-consumer) — running
+  # both at once means whichever one polls first drains the topic, and
+  # the other gets nothing, which surfaced as the DAG's consumer task
+  # committing zero offsets ("Commit failed: Local: No offset stored")
+  # whenever this container had already siphoned off all the events.
+  # Opt in explicitly with `--profile jobs` if you want the standalone
+  # live-demo mode instead of Airflow-driven ingestion.
   kafka-producer:
     build:
       context: ./ingestion
@@ -254,7 +309,7 @@ services:
     networks:
       - kovalyx_bronze_net
     restart: unless-stopped
-    profiles: ["jobs", "full"]
+    profiles: ["jobs"]
 
   kafka-consumer:
     build:
@@ -282,13 +337,18 @@ services:
     networks:
       - kovalyx_bronze_net
     restart: unless-stopped
-    profiles: ["jobs", "full"]
+    profiles: ["jobs"]
 
   # ------------------------------------------------------------------
   # SILVER LAYER
   # ------------------------------------------------------------------
   spark-master:
-    image: bitnami/spark:3.5.1
+    # Not the stock image: spark/Dockerfile layers presidio/spacy/JARs
+    # on top — silver_pyspark_transform's executor-side PII-masking UDFs
+    # need those, and the stock image never had them.
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     container_name: kovalyx-spark-master
     environment:
       SPARK_MODE: master
@@ -307,13 +367,18 @@ services:
       # postgres-gold's audit schema (see kovalyx-silver's Vault policy).
       - kovalyx_gold_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      # bitnamilegacy/spark has neither curl nor wget; python3 (bundled
+      # with the image) is used instead.
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080', timeout=5)"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   spark-worker:
-    image: bitnami/spark:3.5.1
+    # See spark-master's matching comment.
+    build:
+      context: ./spark
+      dockerfile: Dockerfile
     container_name: kovalyx-spark-worker
     environment:
       SPARK_MODE: worker
@@ -343,7 +408,11 @@ services:
       - postgres_metadata_data:/var/lib/postgresql/data
       - ./scripts/init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh:ro
     ports:
-      - "127.0.0.1:5432:5432"
+      # Host port 5432 commonly collides with a locally-installed
+      # Postgres — 5434 avoids that. Container-internal port (what every
+      # other service in this stack actually connects to, via
+      # postgres-metadata:5432 over the Docker network) is unaffected.
+      - "127.0.0.1:5434:5432"
     networks:
       - kovalyx_silver_net
       - kovalyx_gold_net
@@ -401,7 +470,7 @@ services:
         condition: service_healthy
     networks:
       - kovalyx_gold_net
-    profiles: ["jobs", "full"]
+    profiles: ["jobs"]
 
   frontend:
     build:
@@ -433,7 +502,14 @@ services:
       VAULT_ADDR: http://0.0.0.0:8200
     volumes:
       - vault_data:/vault/file
-      - ./vault:/vault/config
+      # NOT ./vault:/vault/config here (unlike docker-compose.prod.yml).
+      # vault-config.hcl's own listener stanza would load alongside the
+      # VAULT_DEV_* env vars above, and Vault would try to bind
+      # 0.0.0.0:8200 twice in the same process — once for dev mode, once
+      # from the mounted config — and fail with "address already in
+      # use" (an in-container bind conflict, not a host port conflict).
+      # Dev mode needs no config file at all; vault_init.py's
+      # --mode dev path talks to it purely over the API.
     ports:
       - "127.0.0.1:8200:8200"
     networks:
@@ -441,7 +517,11 @@ services:
       - kovalyx_silver_net
       - kovalyx_gold_net
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8200/v1/sys/health?standbyok=true"]
+      # 127.0.0.1, not localhost: this image's wget resolves "localhost"
+      # to ::1 first, and Vault's listener only binds 0.0.0.0 (IPv4),
+      # so every check failed with "connection refused" despite Vault
+      # actually being up and unsealed (confirmed via direct exec).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8200/v1/sys/health?standbyok=true"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -592,11 +672,16 @@ services:
     profiles: ["full"]
 
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     container_name: kovalyx-nginx
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
+      # Not :ro — generate_dev_cert_and_start.sh writes a self-signed
+      # placeholder here if no real cert exists yet (see that file).
+      - ./nginx/certs:/etc/nginx/certs
+      - ./nginx/generate_dev_cert_and_start.sh:/docker-entrypoint.d/00-generate-dev-cert.sh:ro
     ports:
       - "80:80"
       - "443:443"
