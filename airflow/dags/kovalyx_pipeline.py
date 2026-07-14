@@ -37,7 +37,11 @@ from vault_secrets_hook import VaultSecretsHook
 
 logger = logging.getLogger("kovalyx.dag")
 
-ENV_TEMPLATE = "{{ var.value.kovalyx_env | default('dev') }}"
+# var.value.X raises if Airflow Variable X was never created — the
+# `| default(...)` filter can't rescue a raised exception (only an
+# undefined value), so var.value.get(name, default) is the actual
+# correct idiom for an optional Variable with a fallback.
+ENV_TEMPLATE = "{{ var.value.get('kovalyx_env', 'dev') }}"
 
 
 def sla_miss_callback(dag, task_list, blocking_task_list, slas, blocking_tis) -> None:
@@ -82,7 +86,18 @@ def write_final_audit_record(**context) -> None:
                     ge_passed = EXCLUDED.ge_passed,
                     status = EXCLUDED.status
                 """,
-                (run_id, "kovalyx_medallion_pipeline", "pipeline_audit_log", "scheduler", start_time, end_time, None, None, True, None, "success"),
+                # records_processed/records_failed/pii_events_masked are 0,
+                # not None: the row for this run_id normally already exists
+                # by now (silver_transform.py's write_pipeline_audit_log()
+                # wrote it during silver_pyspark_transform, with the real
+                # counts), so the ON CONFLICT branch above — which never
+                # touches these three columns — is what actually applies.
+                # But the VALUES tuple still has to satisfy each column's
+                # own NOT NULL constraint regardless of ON CONFLICT, since
+                # Postgres validates the proposed row before checking for a
+                # conflict; passing an explicit None bypassed each column's
+                # DEFAULT 0 and violated NOT NULL on every run.
+                (run_id, "kovalyx_medallion_pipeline", "pipeline_audit_log", "scheduler", start_time, end_time, 0, 0, True, 0, "success"),
             )
     finally:
         conn.close()
@@ -95,7 +110,10 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
     "retry_exponential_backoff": True,
     "email_on_failure": True,
-    "email": ["{{ var.value.kovalyx_alert_email }}"],
+    # Same var.value.get(...) fix as ENV_TEMPLATE above — an unset
+    # Variable here would otherwise crash email rendering on every task
+    # failure, masking the task's actual error behind a Jinja exception.
+    "email": ["{{ var.value.get('kovalyx_alert_email', '') }}"],
     "sla": timedelta(minutes=90),
 }
 
@@ -112,42 +130,82 @@ with DAG(
 ) as dag:
 
     # kafka_producer.py's real flag is --duration-seconds (no --env flag
-    # exists on this script). `|| true` because `timeout` returns exit
-    # code 124 when it kills the process at the deadline, which is the
-    # expected/normal outcome here, not a failure.
+    # exists on this script). `|| test $? -eq 124` (not a blanket `|| true`)
+    # because `timeout` returns exit code 124 when it kills the process at
+    # the deadline, which is the expected/normal outcome here — but a
+    # blanket `|| true` also swallowed genuine crashes (e.g. the script
+    # exiting 1 on a missing Vault credential), which let this task report
+    # SUCCESS after producing zero events, silently starving every
+    # downstream task of data.
     kafka_producer_trigger = BashOperator(
         task_id="kafka_producer_trigger",
-        bash_command=("timeout 300 python /opt/kovalyx/ingestion/kafka_producer.py --duration-seconds 300 || true"),
+        bash_command=("timeout 300 python /opt/kovalyx/ingestion/kafka_producer.py --duration-seconds 300 --date {{ ds }} || test $? -eq 124"),
     )
 
     # kafka_consumer.py takes no CLI arguments at all (env-var driven) —
-    # `timeout` alone bounds how long it drains the topic for.
+    # `timeout` alone bounds how long it drains the topic for, and its
+    # exit code is always 124 (SIGTERM at the deadline) in the normal
+    # case; see kafka_producer_trigger's comment for why this isn't `|| true`.
     bronze_kafka_consumer = BashOperator(
         task_id="bronze_kafka_consumer",
-        bash_command=("timeout 60 python /opt/kovalyx/ingestion/kafka_consumer.py || true"),
+        bash_command=("timeout 60 python /opt/kovalyx/ingestion/kafka_consumer.py || test $? -eq 124"),
     )
 
     # seed_data.py has no --env flag; it's idempotent on its own via the
     # MinIO seed-completion marker (see already_seeded()/mark_seeded()).
+    # --output-dir is explicit: its default (REPO_ROOT/data/seed, i.e.
+    # /opt/kovalyx/data) sits on a bind-mount parent directory owned by
+    # root, not writable by the non-root airflow user — /tmp is always
+    # writable and this data is a disposable staging artifact ahead of
+    # the MinIO upload anyway.
     bronze_batch_ingest = BashOperator(
         task_id="bronze_batch_ingest",
-        bash_command="python /opt/kovalyx/scripts/seed_data.py",
+        bash_command="python /opt/kovalyx/scripts/seed_data.py --output-dir /tmp/kovalyx_seed",
     )
 
-    # --packages pulls hadoop-aws/aws-java-sdk-bundle/postgresql onto both
-    # the driver (running here, in this container, in client deploy mode)
-    # and the executors — spark-master/spark-worker's own images already
-    # have these jars baked in (spark/Dockerfile), but a client-mode
-    # driver submitted from the Airflow container needs them resolved too.
+    # hadoop-aws/aws-java-sdk-bundle/postgresql are baked into both this
+    # container's and spark-worker's $SPARK_HOME/jars/ at image-build time
+    # (see airflow/Dockerfile's matching comment) — deliberately NOT
+    # --packages: that resolved a second, separately-classloaded copy on
+    # top of the executor's already-baked-in jars, which caused an
+    # intermittent NoClassDefFoundError on whichever s3a:// access ran
+    # first in a job.
     silver_pyspark_transform = BashOperator(
         task_id="silver_pyspark_transform",
         bash_command=(
             "spark-submit "
             "--master spark://spark-master:7077 "
             "--deploy-mode client "
-            "--packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.7.3 "
             "--conf spark.executor.memory=2g "
             "--conf spark.driver.memory=1g "
+            # Default spark.network.timeout (120s) / heartbeatInterval (10s)
+            # are too tight for this job: the PII-masking UDFs run real
+            # Presidio+spaCy NER inference per row (no batching), which on
+            # a CPU-constrained Docker Desktop VM can starve the executor's
+            # heartbeat thread long enough to trip the default timeout —
+            # observed as "Lost executor 0 ... worker lost: Not receiving
+            # heartbeat for 60 seconds" / "no recent heartbeats: N ms
+            # exceeds timeout 120000 ms" even though the executor was still
+            # actively working, not actually dead.
+            "--conf spark.network.timeout=800s "
+            "--conf spark.executor.heartbeatInterval=60s "
+            # Without this, Spark auto-detects the driver's hostname as
+            # this container's own (random, non-DNS-registered)
+            # hostname — spark-worker's executor then can't connect
+            # back to report in, so the master shows the app as
+            # RUNNING with resources allocated while the driver sits
+            # forever on "Initial job has not accepted any resources."
+            # airflow-scheduler is the Compose service name, resolvable
+            # from any container on the same networks (LocalExecutor
+            # means this BashOperator always runs in that container).
+            "--conf spark.driver.host=airflow-scheduler "
+            # silver_transform.py's PII-masking UDFs close over
+            # pii_masking.py — the driver can import it fine (same
+            # filesystem, client deploy mode), but executors on
+            # spark-worker need it shipped to them explicitly; without
+            # --py-files, executor-side UDF calls fail with
+            # ModuleNotFoundError: No module named 'pii_masking'.
+            "--py-files /opt/kovalyx/spark/pii_masking.py "
             "/opt/kovalyx/spark/silver_transform.py "
             "--run-id {{ run_id }} "
             "--date {{ ds }} "
