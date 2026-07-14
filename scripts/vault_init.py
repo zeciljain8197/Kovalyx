@@ -137,7 +137,7 @@ def write_secret(client: hvac.Client, path: str, data: dict) -> None:
     logger.info("Wrote secret kovalyx/%s (%d keys)", path, len(clean))
 
 
-def write_all_secrets(client: hvac.Client) -> None:
+def write_all_secrets(client: hvac.Client, mode: str = "dev") -> None:
     write_secret(
         client,
         "kafka/broker",
@@ -212,17 +212,31 @@ def write_all_secrets(client: hvac.Client) -> None:
             "audit_db": os.environ.get("AUDIT_DB_NAME", "kovalyx_audit"),
         },
     )
-    write_secret(
-        client,
-        "postgres/gold",
-        {
-            "host": os.environ.get("SUPABASE_DB_HOST", "postgres-gold"),
+    # mode-aware, not a blind `SUPABASE_DB_* or GOLD_DB_*` fallback chain:
+    # SUPABASE_DB_NAME defaults to the non-blank literal "postgres" in
+    # .env.example (Supabase projects are always named that), which is
+    # truthy even in dev — so `or` never fell through to GOLD_DB_NAME
+    # and every dev-mode Gold write silently landed in the wrong
+    # database (Postgres's own "postgres" maintenance DB has no
+    # audit/staging/marts schemas, since scripts/supabase_schema.sql
+    # only ever runs against POSTGRES_DB=kovalyx_gold).
+    if mode == "prod":
+        gold_secret = {
+            "host": os.environ.get("SUPABASE_DB_HOST"),
             "port": "5432",
-            "database": os.environ.get("SUPABASE_DB_NAME") or os.environ.get("GOLD_DB_NAME"),
-            "user": os.environ.get("SUPABASE_DB_USER") or os.environ.get("GOLD_DB_USER"),
-            "password": os.environ.get("SUPABASE_DB_PASSWORD") or os.environ.get("GOLD_DB_PASSWORD"),
-        },
-    )
+            "database": os.environ.get("SUPABASE_DB_NAME", "postgres"),
+            "user": os.environ.get("SUPABASE_DB_USER"),
+            "password": os.environ.get("SUPABASE_DB_PASSWORD"),
+        }
+    else:
+        gold_secret = {
+            "host": os.environ.get("GOLD_DB_HOST", "postgres-gold"),
+            "port": "5432",
+            "database": os.environ.get("GOLD_DB_NAME", "kovalyx_gold"),
+            "user": os.environ.get("GOLD_DB_USER"),
+            "password": os.environ.get("GOLD_DB_PASSWORD"),
+        }
+    write_secret(client, "postgres/gold", gold_secret)
     write_secret(
         client,
         "supabase/api",
@@ -309,6 +323,7 @@ POLICIES = {
     """,
     "kovalyx-gold": """
         path "kovalyx/data/minio/gold-reader" { capabilities = ["read"] }
+        path "kovalyx/data/minio/silver" { capabilities = ["read"] }
         path "kovalyx/data/postgres/gold" { capabilities = ["read"] }
         path "kovalyx/data/supabase/api" { capabilities = ["read"] }
     """,
@@ -372,7 +387,7 @@ def main() -> int:
         return 1
 
     ensure_kv_engine(client)
-    write_all_secrets(client)
+    write_all_secrets(client, mode=args.mode)
     setup_policies_and_approles(client)
 
     logger.info("Vault bootstrap complete (mode=%s)", args.mode)

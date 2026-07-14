@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 import boto3
 import hvac
 from botocore.client import Config as BotoConfig
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.json_schema import JSONDeserializer
 from confluent_kafka.serialization import MessageField, SerializationContext
@@ -52,6 +52,54 @@ BRONZE_BUCKET = os.environ.get("MINIO_BRONZE_BUCKET", "bronze")
 FLUSH_BATCH_SIZE = int(os.environ.get("CONSUMER_FLUSH_BATCH_SIZE", "200"))
 FLUSH_INTERVAL_SECONDS = float(os.environ.get("CONSUMER_FLUSH_INTERVAL_SECONDS", "15"))
 METRICS_PORT = int(os.environ.get("CONSUMER_METRICS_PORT", "8001"))
+
+# Unlike AvroDeserializer, JSONDeserializer doesn't support schema_str=None
+# (it can't infer the schema from the wire format alone), so it needs an
+# explicit schema. Fetching the producer's registered schema from the
+# registry at consumer startup would race against the producer's first
+# message (which is what actually registers it), so this is kept as an
+# explicit copy of kafka_producer.py's schema instead — must be kept in
+# sync with register_schema() there.
+EVENT_TYPES = [
+    "customer_registered",
+    "item_added_to_cart",
+    "order_placed",
+    "payment_processed",
+    "order_shipped",
+    "order_delivered",
+    "order_returned",
+    "inventory_updated",
+]
+EVENT_SCHEMA_STR = json.dumps(
+    {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "KovalyxEvent",
+        "type": "object",
+        "required": ["event_id", "event_type", "event_timestamp"],
+        "properties": {
+            "event_id": {"type": "string"},
+            "event_type": {"type": "string", "enum": EVENT_TYPES},
+            "event_timestamp": {"type": "string"},
+            "order_id": {"type": ["string", "null"]},
+            "customer_id": {"type": ["string", "null"]},
+            "customer_name": {"type": ["string", "null"]},
+            "customer_email": {"type": ["string", "null"]},
+            "customer_phone": {"type": ["string", "null"]},
+            "product_id": {"type": ["string", "null"]},
+            "product_name": {"type": ["string", "null"]},
+            "category": {"type": ["string", "null"]},
+            "quantity": {"type": ["integer", "null"]},
+            "unit_price": {"type": ["number", "null"]},
+            "order_amount": {"type": ["number", "null"]},
+            "shipping_address": {"type": ["string", "null"]},
+            "card_last4": {"type": ["string", "null"]},
+            "card_type": {"type": ["string", "null"]},
+            "status": {"type": ["string", "null"]},
+            "stock_level": {"type": ["integer", "null"]},
+            "reorder_threshold": {"type": ["integer", "null"]},
+        },
+    }
+)
 
 RECORDS_PROCESSED = Counter(
     "kovalyx_records_processed_total",
@@ -169,6 +217,19 @@ class BronzeWriter:
         return written
 
 
+def _commit(consumer: Consumer) -> None:
+    """consumer.commit() raises _NO_OFFSET rather than no-op'ing when
+    there's nothing new to commit since the last commit (e.g. the
+    shutdown-triggered final commit right after an in-loop commit that
+    already covered every polled message) — that's not a real failure,
+    just confirmation there was nothing new."""
+    try:
+        consumer.commit(asynchronous=False)
+    except KafkaException as exc:
+        if exc.args[0].code() != KafkaError._NO_OFFSET:
+            raise
+
+
 def _event_date(event: dict) -> str:
     ts = event.get("event_timestamp")
     if not ts:
@@ -190,7 +251,7 @@ def main() -> int:
     schema_registry_url = os.environ.get("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
 
     schema_registry_client = SchemaRegistryClient({"url": schema_registry_url})
-    json_deserializer = JSONDeserializer(schema_str=None, schema_registry_client=schema_registry_client)
+    json_deserializer = JSONDeserializer(schema_str=EVENT_SCHEMA_STR, schema_registry_client=schema_registry_client)
 
     s3_client = build_minio_client(vault_client)
     ensure_bucket(s3_client, BRONZE_BUCKET)
@@ -237,11 +298,11 @@ def main() -> int:
 
             if writer.should_flush():
                 writer.flush()
-                consumer.commit(asynchronous=False)
+                _commit(consumer)
     finally:
         logger.info("Final flush before shutdown...")
         writer.flush()
-        consumer.commit(asynchronous=False)
+        _commit(consumer)
         consumer.close()
         logger.info("Kovalyx consumer stopped cleanly")
 

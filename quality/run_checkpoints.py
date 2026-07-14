@@ -173,7 +173,16 @@ def build_pg_conn_params(vault_client: hvac.Client | None) -> dict:
 def load_silver_parquet_as_pandas(s3_client, bucket: str, prefix: str) -> pd.DataFrame:
     """Reads every Parquet part file under `prefix` in MinIO into one
     pandas DataFrame — the genuine "read from S3" step (see module
-    docstring for why this replaces GE's native S3DataConnector here)."""
+    docstring for why this replaces GE's native S3DataConnector here).
+
+    Reconstructs Hive-style partition columns (e.g. events/.../
+    event_type=order_placed/part-*.parquet) from each key's path: Spark's
+    partitionBy() strips the partition column out of the Parquet file's
+    own content and encodes it only in the directory name, so a plain
+    pq.read_table() on the raw bytes silently drops it — GE expectations
+    referencing that column then fail with "column does not exist" even
+    though the data is right there in the path.
+    """
     paginator = s3_client.get_paginator("list_objects_v2")
     frames = []
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
@@ -183,7 +192,12 @@ def load_silver_parquet_as_pandas(s3_client, bucket: str, prefix: str) -> pd.Dat
                 continue
             body = s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
             table = pq.read_table(io.BytesIO(body))
-            frames.append(table.to_pandas())
+            df = table.to_pandas()
+            for segment in key[len(prefix):].split("/")[:-1]:
+                if "=" in segment:
+                    part_col, part_value = segment.split("=", 1)
+                    df[part_col] = part_value
+            frames.append(df)
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)

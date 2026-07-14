@@ -151,7 +151,12 @@ CREATE INDEX IF NOT EXISTS idx_staging_inventory_product_id ON staging.inventory
 -- Audit tables — written by Airflow / Presidio / Great Expectations.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit.kovalyx_pipeline_audit_log (
-    run_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- TEXT, not UUID: this is always populated from Airflow's own
+    -- {{ run_id }} (e.g. "scheduled__2026-07-13T22:00:00+00:00"),
+    -- never a real UUID, by every writer (this DAG's
+    -- write_final_audit_record, silver_transform.py/pii_masking.py,
+    -- silver_to_postgres_loader.py, run_checkpoints.py).
+    run_id TEXT PRIMARY KEY,
     dag_id TEXT NOT NULL,
     task_id TEXT,
     triggered_by TEXT,
@@ -172,12 +177,19 @@ CREATE TABLE IF NOT EXISTS audit.kovalyx_pii_audit_log (
     field_name TEXT NOT NULL,
     masking_action TEXT NOT NULL,
     masked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    pipeline_run_id UUID REFERENCES audit.kovalyx_pipeline_audit_log (run_id)
+    -- No REFERENCES: pii_masking.py writes these rows during
+    -- silver_pyspark_transform, long before the DAG's final
+    -- pipeline_audit_log task inserts the corresponding
+    -- kovalyx_pipeline_audit_log row an FK would require to already
+    -- exist. Audit/log tables favor "always accept the write" over
+    -- enforced referential integrity against a row that, by this
+    -- pipeline's own task ordering, hasn't been created yet.
+    pipeline_run_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit.ge_validation_results (
     id BIGSERIAL PRIMARY KEY,
-    pipeline_run_id UUID REFERENCES audit.kovalyx_pipeline_audit_log (run_id),
+    pipeline_run_id TEXT,  -- see kovalyx_pii_audit_log's matching comment
     expectation_suite_name TEXT NOT NULL,
     success BOOLEAN NOT NULL,
     evaluated_expectations INTEGER,
@@ -337,7 +349,26 @@ ALTER TABLE audit.ge_validation_results
 -- apply_anon_rls() is invoked from dbt_project.yml's on-run-end hook
 -- alongside apply_analytics_rls()/apply_pipeline_writer_rls(), so it
 -- re-runs after every `dbt run` — no manual step needed.
+--
+-- Real Supabase projects already have an `anon` role (created by the
+-- platform for PostgREST's JWT role-switching), but a bare local
+-- postgres-gold container (docker-compose.yml's dev stand-in, plain
+-- postgres:16-alpine) does not — this script's own docker-entrypoint-
+-- initdb.d run failed here with "role anon does not exist" and aborted
+-- the rest of the init script, taking every table/policy after this
+-- point down with it. Created defensively, same IF NOT EXISTS pattern
+-- as analytics_reader/pipeline_writer/audit_reader above, and NOLOGIN
+-- to match Supabase's own convention (anon is only ever reached via
+-- PostgREST's role-switching, never a direct password login).
 -- =====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+        CREATE ROLE anon NOLOGIN;
+    END IF;
+END
+$$;
+
 GRANT USAGE ON SCHEMA marts TO anon;
 
 CREATE OR REPLACE FUNCTION marts.apply_anon_rls() RETURNS void AS $$
@@ -370,3 +401,45 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Run once now in case marts already has tables from a prior dbt run
 -- (no-op on a fresh database — the loop simply matches zero rows).
 SELECT marts.apply_anon_rls();
+
+-- =====================================================================
+-- MIGRATION: run_id/pipeline_run_id UUID -> TEXT
+--
+-- The three CREATE TABLE statements above already declare these as
+-- TEXT, but this script only runs automatically via
+-- docker-entrypoint-initdb.d on a genuinely fresh Postgres data
+-- directory — any database initialized before this fix (with run_id
+-- UUID) needs the columns converted in place. Airflow's own {{ run_id }}
+-- (e.g. "scheduled__2026-07-13T22:00:00+00:00") was never a valid UUID,
+-- so every write from silver_transform.py/pii_masking.py,
+-- silver_to_postgres_loader.py, run_checkpoints.py, and this DAG's own
+-- write_final_audit_record failed with "column is of type uuid but
+-- expression is of type character varying" the first time the full
+-- pipeline actually ran end to end. No-ops (via information_schema
+-- checks) if the columns are already TEXT.
+-- =====================================================================
+DO $$
+BEGIN
+    IF (SELECT data_type FROM information_schema.columns
+        WHERE table_schema = 'audit' AND table_name = 'kovalyx_pipeline_audit_log' AND column_name = 'run_id') = 'uuid'
+    THEN
+        ALTER TABLE audit.kovalyx_pii_audit_log DROP CONSTRAINT IF EXISTS kovalyx_pii_audit_log_pipeline_run_id_fkey;
+        ALTER TABLE audit.ge_validation_results DROP CONSTRAINT IF EXISTS ge_validation_results_pipeline_run_id_fkey;
+
+        ALTER TABLE audit.kovalyx_pipeline_audit_log ALTER COLUMN run_id DROP DEFAULT;
+        ALTER TABLE audit.kovalyx_pipeline_audit_log ALTER COLUMN run_id TYPE TEXT USING run_id::TEXT;
+        ALTER TABLE audit.kovalyx_pii_audit_log ALTER COLUMN pipeline_run_id TYPE TEXT USING pipeline_run_id::TEXT;
+        ALTER TABLE audit.ge_validation_results ALTER COLUMN pipeline_run_id TYPE TEXT USING pipeline_run_id::TEXT;
+        -- Not re-added as foreign keys: see kovalyx_pii_audit_log's
+        -- CREATE TABLE comment above — the referenced row doesn't
+        -- exist yet at write time, by this pipeline's own task order.
+    END IF;
+
+    -- Separate, unconditional (idempotent via IF EXISTS) drop: databases
+    -- that already had their run_id/pipeline_run_id columns migrated to
+    -- TEXT by an earlier version of this same migration block still had
+    -- the FK re-added at that time and need it dropped too.
+    ALTER TABLE audit.kovalyx_pii_audit_log DROP CONSTRAINT IF EXISTS kovalyx_pii_audit_log_pipeline_run_id_fkey;
+    ALTER TABLE audit.ge_validation_results DROP CONSTRAINT IF EXISTS ge_validation_results_pipeline_run_id_fkey;
+END
+$$;

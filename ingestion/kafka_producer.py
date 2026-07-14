@@ -187,11 +187,25 @@ def make_customer(faker: Faker) -> dict:
     }
 
 
+_EVENT_DATE_OVERRIDE: str | None = None  # set from --date in main()
+
+
 def iso_timestamp_ms() -> str:
     """ISO 8601 with millisecond precision and a literal 'Z' suffix, e.g.
     2024-01-15T14:23:11.000Z — Python's isoformat() defaults to '+00:00'
-    for UTC, which the bronze contract doesn't accept."""
+    for UTC, which the bronze contract doesn't accept.
+
+    Pins the date portion to _EVENT_DATE_OVERRIDE when set: the Airflow DAG
+    passes --date {{ ds }} so events always land in the Bronze partition
+    matching the DAG run's logical date, regardless of how long upstream
+    tasks/retries take in wall-clock time (real now() would otherwise write
+    into a later date partition than what Silver, driven off the same
+    {{ ds }}, reads back — the bug that first surfaced this).
+    """
     now = datetime.now(timezone.utc)
+    if _EVENT_DATE_OVERRIDE:
+        override = datetime.strptime(_EVENT_DATE_OVERRIDE, "%Y-%m-%d")
+        now = now.replace(year=override.year, month=override.month, day=override.day)
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
 
 
@@ -435,7 +449,11 @@ def delivery_report(err, msg) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Kovalyx Kafka event producer")
     parser.add_argument("--duration-seconds", type=int, default=None, help="Run for N seconds then exit (burst mode)")
+    parser.add_argument("--date", type=str, default=None, help="Pin generated event_timestamps to this date (YYYY-MM-DD) instead of real wall-clock time")
     args = parser.parse_args()
+
+    global _EVENT_DATE_OVERRIDE
+    _EVENT_DATE_OVERRIDE = args.date
 
     start_http_server(METRICS_PORT)
     logger.info("Prometheus metrics exposed on :%d/metrics", METRICS_PORT)
