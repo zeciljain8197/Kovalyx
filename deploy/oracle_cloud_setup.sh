@@ -78,15 +78,20 @@ timeout 60 bash -c \
     'until curl -sf "http://localhost:8200/v1/sys/health?standbyok=true" > /dev/null; do sleep 3; done'
 
 echo "==> Running vault_init.py (production mode)..."
+# vault_init.py's real flag is --mode (dev|prod), not --env, and it loads
+# credentials via `load_dotenv(REPO_ROOT / ".env")` where REPO_ROOT is
+# resolved from its own file location — inside this container that's
+# /opt/kovalyx, so .env must be mounted there too, or every
+# os.environ.get(...) call in the script silently returns None.
 docker run --rm \
     --network kovalyx_bronze_net \
     -e VAULT_ADDR="http://vault:8200" \
-    -e VAULT_ENV=prod \
     -v "$KOVALYX_DIR/scripts:/opt/kovalyx/scripts:ro" \
     -v "$KOVALYX_DIR/vault:/opt/kovalyx/vault" \
+    -v "$KOVALYX_DIR/.env:/opt/kovalyx/.env:ro" \
     -w /opt/kovalyx/scripts \
     python:3.11-slim \
-    bash -c "pip install -q $ONEOFF_DEPS && python vault_init.py --env prod"
+    bash -c "pip install -q $ONEOFF_DEPS && python vault_init.py --mode prod"
 
 echo "IMPORTANT: Save the vault_init.py output above — unseal keys and the root token are shown once only."
 read -r -p "Confirm you have saved the Vault credentials: "
@@ -144,12 +149,15 @@ docker compose -f docker-compose.prod.yml ps
 # 8. Seed initial data
 # ---------------------------------------------------------------------
 echo "==> Seeding initial batch data..."
+# seed_data.py has no --env/--mode flag; like vault_init.py it loads
+# REPO_ROOT/.env directly, so .env must be mounted at /opt/kovalyx here too.
 docker run --rm \
     --network kovalyx_bronze_net \
     -e KOVALYX_MINIO_ENDPOINT=minio:9000 \
     -e VAULT_ADDR="http://vault:8200" \
     -v "$KOVALYX_DIR/scripts:/opt/kovalyx/scripts:ro" \
     -v "$KOVALYX_DIR/vault:/opt/kovalyx/vault:ro" \
+    -v "$KOVALYX_DIR/.env:/opt/kovalyx/.env:ro" \
     -w /opt/kovalyx/scripts \
     python:3.11-slim \
     bash -c "pip install -q $ONEOFF_DEPS && python seed_data.py"
