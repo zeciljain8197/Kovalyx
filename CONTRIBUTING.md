@@ -48,8 +48,8 @@ See the architecture diagram in [README.md](README.md) for how these connect.
 - Open a PR against `main`. CI (`.github/workflows/ci.yml`) must pass —
   secret scanning, Dockerfile vulnerability scanning, dbt compile/test,
   Python compile checks, and a Docker build validation.
-- Merges to `main` trigger `.github/workflows/deploy.yml`, which rolls the
-  production stack on the Oracle Cloud VM. Treat `main` as always-deployable.
+- Merges to `main` trigger Vercel's GitHub-connected auto-deploy for the
+  `frontend/` dashboard. Treat `main` as always-deployable.
 
 ## Running Tests Locally
 
@@ -75,10 +75,6 @@ Configure these under Settings → Secrets and variables → Actions:
 | `CI_PG_DATABASE` | `ci.yml` | Database name for CI's dbt target |
 | `CI_PG_USER` | `ci.yml` | Postgres user for CI's dbt target |
 | `CI_PG_PASSWORD` | `ci.yml` | Postgres password for CI's dbt target |
-| `ORACLE_VM_HOST` | `deploy.yml` | SSH host of the production Oracle Cloud VM |
-| `ORACLE_VM_USER` | `deploy.yml` | SSH user for deployment |
-| `ORACLE_VM_SSH_KEY` | `deploy.yml` | Private key for SSH deployment access |
-| `STREAMLIT_WEBHOOK_URL` | `deploy.yml` | Triggers a Streamlit Community Cloud redeploy after a successful deploy |
 
 ## Code Style
 

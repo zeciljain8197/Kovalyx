@@ -79,7 +79,7 @@ graph LR
 | Security | HashiCorp Vault 1.15, SASL/PLAIN Kafka auth, Postgres RLS |
 | Observability | Prometheus, Grafana, Loki, Promtail |
 | Frontend | Next.js 14, Vercel, shadcn/ui, Recharts |
-| Infrastructure | Docker Compose, Nginx, Oracle Cloud, GitHub Actions |
+| Infrastructure | Docker Compose, Nginx, Vercel, Supabase, GitHub Actions |
 
 ## Quick Start (Local)
 
@@ -115,25 +115,18 @@ useful if you're driving ingestion and dbt manually.
 services are also reachable directly on their own mapped ports, e.g.
 `localhost:8080` for Airflow, `localhost:3000` for Grafana.)
 
-## Deployment (Oracle Cloud)
+## Deployment
 
-Kovalyx is sized to run comfortably on an Oracle Cloud **Always Free**
-ARM instance (4 OCPUs / 24GB RAM), which makes "self-hosted" mean
-"actually free to run," not just "free software." `deploy/oracle_cloud_setup.sh`
-takes a bare Ubuntu 22.04 VM from zero to a fully running, TLS-terminated
-Kovalyx stack: Docker, Vault production init, Let's Encrypt certificates,
-a locked-down firewall, and the full Compose stack, in one pass.
+The full pipeline (Kafka, Spark, dbt, Airflow, Vault, Postgres,
+observability) is designed to be run locally or self-hosted via
+`docker compose --profile full up -d`, on any VM with 8GB+ RAM.
 
-Once the VM is bootstrapped, `.github/workflows/deploy.yml` handles every
-subsequent deploy automatically on every push to `main` — pull, rebuild,
-roll the stack, and verify Airflow comes back healthy.
-
-```bash
-scp deploy/oracle_cloud_setup.sh ubuntu@<your-vm-ip>:~/
-ssh ubuntu@<your-vm-ip>
-chmod +x oracle_cloud_setup.sh
-./oracle_cloud_setup.sh
-```
+The public-facing piece — the `frontend/` dashboard — is deployed
+separately and for free: Next.js on Vercel, reading live data from a
+Supabase Postgres project that holds the Gold-layer marts. Vercel is
+connected directly to this GitHub repo, so every push to `main` that
+touches `frontend/` triggers an automatic rebuild and deploy — no
+manual deploy step required.
 
 ## Security Design
 
@@ -164,8 +157,7 @@ kovalyx/
 ├── nginx/               # Reverse proxy config + TLS certs (git-ignored)
 ├── frontend/              # Next.js customer-facing dashboard
 ├── streamlit_monitor/       # Internal ops/audit dashboard
-├── deploy/                    # Oracle Cloud VM bootstrap script
-└── .github/                     # CI/CD workflows, issue templates
+└── .github/                    # CI/CD workflows, issue templates
 ```
 
 ## Contributing

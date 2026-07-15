@@ -17,7 +17,7 @@ const TECH_STACK_TABLE: { layer: string; technologies: string }[] = [
   { layer: 'Security', technologies: 'HashiCorp Vault 1.15, SASL/PLAIN Kafka auth, Postgres RLS' },
   { layer: 'Observability', technologies: 'Prometheus, Grafana, Loki, Promtail' },
   { layer: 'Frontend', technologies: 'Next.js 14, Vercel, Tailwind CSS, Recharts' },
-  { layer: 'Infrastructure', technologies: 'Docker Compose, Nginx, Oracle Cloud, GitHub Actions' },
+  { layer: 'Infrastructure', technologies: 'Docker Compose, Nginx, Vercel, Supabase, GitHub Actions' },
 ]
 
 const QUESTIONS: { q: string; a: string }[] = [
@@ -43,7 +43,7 @@ const QUESTIONS: { q: string; a: string }[] = [
   },
   {
     q: 'How did you make this production-like on a single VM?',
-    a: 'Every credential is issued by HashiCorp Vault via least-privilege AppRole policies — nothing is hardcoded. PII (names, emails, phone numbers) is masked by Presidio NER + deterministic hashing at the Silver layer, before it can ever reach an analyst or a dashboard. Docker network isolation keeps each layer from talking to services it has no reason to reach. The whole stack is designed to run on a free-tier Oracle Cloud ARM VM.',
+    a: 'Every credential is issued by HashiCorp Vault via least-privilege AppRole policies — nothing is hardcoded. PII (names, emails, phone numbers) is masked by Presidio NER + deterministic hashing at the Silver layer, before it can ever reach an analyst or a dashboard. Docker network isolation keeps each layer from talking to services it has no reason to reach. The whole pipeline is designed to run self-hosted on a single small VM via one `docker compose up` — the dashboard you\'re looking at is deployed separately, for free, on Vercel + Supabase.',
   },
 ]
 

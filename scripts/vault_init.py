@@ -282,14 +282,6 @@ def write_all_secrets(client: hvac.Client, mode: str = "dev") -> None:
             "alert_to": os.environ.get("ALERT_EMAIL_TO"),
         },
     )
-    write_secret(
-        client,
-        "deployment/tls",
-        {
-            "domain": os.environ.get("KOVALYX_DOMAIN"),
-            "letsencrypt_email": os.environ.get("LETSENCRYPT_EMAIL"),
-        },
-    )
 
 
 # ---------------------------------------------------------------------

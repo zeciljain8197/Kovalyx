@@ -26,5 +26,4 @@ Paste relevant logs from Grafana Loki or `docker compose logs`.
 
 **Environment**
 - Docker Compose version:
-- Running locally or Oracle Cloud:
 - Last successful pipeline run date:
