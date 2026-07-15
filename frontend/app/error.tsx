@@ -13,7 +13,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
       <AlertTriangle className="h-12 w-12 text-red-500" />
-      <h1 className="text-xl font-bold text-white">Something went wrong</h1>
+      <h1 className="text-xl font-bold text-gray-900 dark:text-white">Something went wrong</h1>
       {process.env.NODE_ENV === 'development' && (
         <p className="max-w-md text-sm text-gray-500">{error.message}</p>
       )}
@@ -27,7 +27,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         </button>
         <Link
           href="/pipeline"
-          className="rounded-md border border-gray-700 px-4 py-2 text-sm font-medium text-gray-300 hover:border-kovalyx-gold hover:text-kovalyx-gold"
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:border-kovalyx-goldText hover:text-kovalyx-goldText dark:border-gray-700 dark:text-gray-300 dark:hover:border-kovalyx-gold dark:hover:text-kovalyx-gold"
         >
           Check pipeline status
         </Link>

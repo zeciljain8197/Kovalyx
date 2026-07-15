@@ -284,11 +284,6 @@ def write_all_secrets(client: hvac.Client, mode: str = "dev") -> None:
     )
     write_secret(
         client,
-        "frontend/admin",
-        {"password": os.environ.get("KOVALYX_ADMIN_PASSWORD")},
-    )
-    write_secret(
-        client,
         "deployment/tls",
         {
             "domain": os.environ.get("KOVALYX_DOMAIN"),

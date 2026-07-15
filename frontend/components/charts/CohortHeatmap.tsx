@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo } from 'react'
-import { format } from 'date-fns'
 import type { CohortRow } from '@/lib/queries/customers'
 
 export interface CohortHeatmapProps {
@@ -9,6 +8,22 @@ export interface CohortHeatmapProps {
 }
 
 const WEEK_COLUMNS = Array.from({ length: 13 }, (_, i) => i) // Week 0 .. Week 12
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * `new Date('2026-07-06')` parses as UTC midnight, but date-fns `format`
+ * renders in the local timezone — so the server (UTC container) and a
+ * client browser in a different timezone can render different calendar
+ * dates for the same string, which React flags as a hydration mismatch.
+ * Reading the UTC getters instead keeps the rendered date identical
+ * regardless of which timezone the code happens to run in.
+ */
+function formatCohortWeekLabel(dateStr: string): string {
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return dateStr
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`
+}
 
 function cellColor(retentionRate: number): string {
   if (retentionRate >= 0.9) return 'bg-green-500'
@@ -40,9 +55,9 @@ export function CohortHeatmap({ data }: CohortHeatmapProps) {
       <table className="border-collapse text-xs">
         <thead>
           <tr>
-            <th className="px-2 py-1 text-left text-gray-400">Cohort</th>
+            <th className="px-2 py-1 text-left text-gray-500 dark:text-gray-400">Cohort</th>
             {WEEK_COLUMNS.map((w) => (
-              <th key={w} className="px-2 py-1 text-center font-normal text-gray-400">
+              <th key={w} className="px-2 py-1 text-center font-normal text-gray-500 dark:text-gray-400">
                 Week {w}
               </th>
             ))}
@@ -51,21 +66,15 @@ export function CohortHeatmap({ data }: CohortHeatmapProps) {
         <tbody>
           {cohortWeeks.map((cohortWeek) => (
             <tr key={cohortWeek}>
-              <td className="whitespace-nowrap px-2 py-1 text-gray-300">
-                {(() => {
-                  try {
-                    return format(new Date(cohortWeek), 'MMM d, yyyy')
-                  } catch {
-                    return cohortWeek
-                  }
-                })()}
+              <td className="whitespace-nowrap px-2 py-1 text-gray-700 dark:text-gray-300">
+                {formatCohortWeekLabel(cohortWeek)}
               </td>
               {WEEK_COLUMNS.map((w) => {
                 const cell = grid.get(cohortWeek)?.get(w)
                 if (!cell) {
                   return (
                     <td key={w} className="p-1">
-                      <div className="h-8 w-14 rounded bg-gray-800" title="No data yet" />
+                      <div className="h-8 w-14 rounded bg-gray-200 dark:bg-gray-800" title="No data yet" />
                     </td>
                   )
                 }

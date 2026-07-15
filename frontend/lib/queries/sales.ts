@@ -77,11 +77,11 @@ export async function getDailySalesTrend(days: number = 30): Promise<DailySales[
   }
 }
 
-export async function getSalesByCategory(): Promise<SalesByCategory[]> {
+export async function getSalesByCategory(days: number = 30): Promise<SalesByCategory[]> {
   try {
     const supabase = createPublicClient()
     const since = new Date()
-    since.setDate(since.getDate() - 30)
+    since.setDate(since.getDate() - days)
 
     const { data, error } = await supabase
       .from('mart_sales_summary')

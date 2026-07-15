@@ -96,11 +96,11 @@ export async function getReturnTrends(months: number = 6): Promise<ReturnTrend[]
   }
 }
 
-export async function getReturnsByCategory(): Promise<ReturnsByCategory[]> {
+export async function getReturnsByCategory(days: number = 90): Promise<ReturnsByCategory[]> {
   try {
     const supabase = createPublicClient()
     const since = new Date()
-    since.setDate(since.getDate() - 90)
+    since.setDate(since.getDate() - days)
 
     const { data, error } = await supabase
       .from('mart_return_rates')

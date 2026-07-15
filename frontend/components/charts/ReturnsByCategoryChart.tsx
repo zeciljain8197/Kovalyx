@@ -9,6 +9,7 @@
 // wrapper is the closest equivalent.
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { ReturnsByCategory } from '@/lib/queries/returns'
+import { useChartTheme } from '@/lib/chart-theme'
 
 export interface ReturnsByCategoryChartProps {
   data: ReturnsByCategory[]
@@ -19,15 +20,16 @@ function formatPct(value: number): string {
 }
 
 export function ReturnsByCategoryChart({ data }: ReturnsByCategoryChartProps) {
+  const theme = useChartTheme()
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-        <XAxis dataKey="category" stroke="#6b7280" fontSize={12} />
-        <YAxis tickFormatter={formatPct} stroke="#6b7280" fontSize={12} />
+        <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} />
+        <XAxis dataKey="category" stroke={theme.axis} fontSize={12} />
+        <YAxis tickFormatter={formatPct} stroke={theme.axis} fontSize={12} />
         <Tooltip
           formatter={(value: number) => formatPct(value)}
-          contentStyle={{ background: '#111827', border: '1px solid #1f2937', fontSize: 12 }}
+          contentStyle={{ background: theme.tooltipBg, border: `1px solid ${theme.tooltipBorder}`, fontSize: 12, color: theme.tooltipText }}
         />
         <Bar dataKey="return_rate" fill="#ef4444" fillOpacity={0.7} />
       </BarChart>

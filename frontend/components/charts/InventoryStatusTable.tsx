@@ -79,7 +79,7 @@ export function InventoryStatusTable({ data }: InventoryStatusTableProps) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by product name..."
-          className="rounded-md border border-gray-800 bg-gray-900 px-3 py-1.5 text-sm text-gray-200 placeholder:text-gray-500 focus:border-kovalyx-gold focus:outline-none"
+          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-kovalyx-goldText focus:outline-none dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:placeholder:text-gray-500 dark:focus:border-kovalyx-gold"
         />
         <div className="flex gap-1">
           {(['all', 'red', 'yellow', 'green'] as FilterLevel[]).map((level) => (
@@ -90,8 +90,8 @@ export function InventoryStatusTable({ data }: InventoryStatusTableProps) {
               className={clsx(
                 'rounded-md px-3 py-1.5 text-xs font-medium capitalize',
                 filterLevel === level
-                  ? 'bg-kovalyx-gold text-gray-950'
-                  : 'bg-gray-900 text-gray-400 hover:text-gray-200'
+                  ? 'bg-kovalyx-goldText text-white dark:bg-kovalyx-gold dark:text-gray-950'
+                  : 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
               )}
             >
               {level}
@@ -100,35 +100,35 @@ export function InventoryStatusTable({ data }: InventoryStatusTableProps) {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-800">
-        <table className="min-w-full divide-y divide-gray-800 text-sm">
-          <thead className="bg-gray-900">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+        <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+          <thead className="bg-gray-50 dark:bg-gray-900">
             <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-400">Status</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Status</th>
               <th
-                className="cursor-pointer px-4 py-2 text-left font-medium text-gray-400"
+                className="cursor-pointer px-4 py-2 text-left font-medium text-gray-500 dark:text-gray-400"
                 onClick={() => toggleSort('product_name')}
               >
                 Product Name
               </th>
-              <th className="px-4 py-2 text-left font-medium text-gray-400">Category</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-400">Current Stock</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-400">Reorder Threshold</th>
+              <th className="px-4 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Category</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Current Stock</th>
+              <th className="px-4 py-2 text-right font-medium text-gray-500 dark:text-gray-400">Reorder Threshold</th>
               <th
-                className="cursor-pointer px-4 py-2 text-right font-medium text-gray-400"
+                className="cursor-pointer px-4 py-2 text-right font-medium text-gray-500 dark:text-gray-400"
                 onClick={() => toggleSort('days_of_stock_remaining')}
               >
                 Days of Stock Remaining
               </th>
               <th
-                className="cursor-pointer px-4 py-2 text-left font-medium text-gray-400"
+                className="cursor-pointer px-4 py-2 text-left font-medium text-gray-500 dark:text-gray-400"
                 onClick={() => toggleSort('alert_level')}
               >
                 Alert Level
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-800 bg-gray-950">
+          <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-950">
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
@@ -137,15 +137,15 @@ export function InventoryStatusTable({ data }: InventoryStatusTableProps) {
               </tr>
             ) : (
               filtered.map((row) => (
-                <tr key={`${row.product_id}-${row.snapshot_date}`} className="hover:bg-gray-900/50">
+                <tr key={`${row.product_id}-${row.snapshot_date}`} className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
                   <td className="px-4 py-2">
                     <span className={`inline-block h-2 w-2 rounded-full ${DOT_CLASSES[row.alert_level]}`} />
                   </td>
-                  <td className="px-4 py-2 text-gray-200">{row.product_name}</td>
-                  <td className="px-4 py-2 text-gray-400">{row.category}</td>
-                  <td className="px-4 py-2 text-right text-gray-200">{row.current_stock_level}</td>
-                  <td className="px-4 py-2 text-right text-gray-400">{row.reorder_threshold}</td>
-                  <td className="px-4 py-2 text-right text-gray-200">
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-200">{row.product_name}</td>
+                  <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{row.category}</td>
+                  <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-200">{row.current_stock_level}</td>
+                  <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{row.reorder_threshold}</td>
+                  <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-200">
                     {row.days_of_stock_remaining !== null ? `${row.days_of_stock_remaining.toFixed(1)} days` : 'N/A'}
                   </td>
                   <td className="px-4 py-2">

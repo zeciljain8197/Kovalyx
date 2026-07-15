@@ -28,7 +28,7 @@ export async function PipelineStatusBadge({ status, lastRun }: PipelineStatusBad
   }
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-gray-800 bg-gray-900 px-3 py-1 text-xs text-gray-300">
+    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
       <span className={`h-2 w-2 rounded-full ${DOT_CLASSES[resolvedStatus]}`} />
       <span>{LABELS[resolvedStatus]}</span>
       {resolvedLastRun && (

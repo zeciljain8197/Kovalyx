@@ -1,9 +1,9 @@
-import { Lock } from 'lucide-react'
 import { getLastSuccessfulRun, getPiiAuditSummary, getRecentGeResults, getRecentPipelineRuns } from '@/lib/queries/pipeline'
 import { KpiCard } from '@/components/KpiCard'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Table } from '@/components/ui/Table'
+import { InterviewNote } from '@/components/InterviewNote'
 
 export const revalidate = 60
 
@@ -33,49 +33,54 @@ export default async function PipelinePage() {
     getRecentPipelineRuns(50),
   ])
 
+  const gePassedCount = geResults.filter((r) => r.success).length
+  const piiFieldsMasked = piiSummary.length
+  const piiEventsTotal = piiSummary.reduce((sum, p) => sum + p.count, 0)
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold text-white">Pipeline Health</h1>
-        <Badge variant="info">
-          <Lock size={10} className="mr-1 inline" /> Admin
-        </Badge>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline Health</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Live run history, data-quality checks, and PII audit trail — proof this is a real, running system, not a mockup.
+        </p>
       </div>
 
-      <Card>
-        <h2 className="mb-3 text-sm font-semibold text-gray-400">Last Successful Run</h2>
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-gray-500 dark:text-gray-400">Last Successful Run</h2>
         {lastRun ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <p className="text-xs text-gray-500">Run ID</p>
-              <p className="truncate text-sm text-gray-200">{lastRun.run_id}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Completed</p>
-              <p className="text-sm text-gray-200">{formatDate(lastRun.end_time)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Records Processed</p>
-              <p className="text-sm text-gray-200">{lastRun.records_processed ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">PII Events Masked</p>
-              <p className="text-sm text-gray-200">{lastRun.pii_events_masked ?? 0}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">GE Passed</p>
-              <Badge variant={lastRun.ge_passed ? 'success' : 'danger'}>
-                {lastRun.ge_passed ? 'Passed' : 'Failed'}
-              </Badge>
-            </div>
+            <KpiCard title="Run ID" value={lastRun.run_id.slice(0, 8)} subtitle="Airflow DAG run identifier" />
+            <KpiCard title="Completed" value={formatDate(lastRun.end_time)} subtitle="Most recent successful run" />
+            <KpiCard
+              title="Records Processed"
+              value={lastRun.records_processed ?? 0}
+              subtitle="Rows loaded to the Gold layer"
+            />
+            <KpiCard
+              title="GE Passed"
+              value={lastRun.ge_passed ? 'Passed' : 'Failed'}
+              subtitle="Great Expectations checkpoint status"
+              variant={lastRun.ge_passed ? 'success' : 'danger'}
+            />
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No successful runs recorded yet.</p>
+          <Card>
+            <p className="text-sm text-gray-500">No successful runs recorded yet.</p>
+          </Card>
         )}
-      </Card>
+      </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-200">Great Expectations Results</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">Great Expectations Results</h2>
+        <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <KpiCard
+            title="Checkpoints Passing"
+            value={`${gePassedCount}/${geResults.length}`}
+            subtitle="Data-quality checks run by Great Expectations after each Silver-layer transform"
+            variant={gePassedCount === geResults.length && geResults.length > 0 ? 'success' : 'warning'}
+          />
+        </div>
         <Table
           headers={['Checkpoint', 'Success', 'Evaluated', 'Successful', 'Failed', 'Run Time']}
           rows={geResults.map((r) => [
@@ -90,22 +95,45 @@ export default async function PipelinePage() {
           ])}
           emptyMessage="No Great Expectations results recorded yet."
         />
+        <div className="mt-3">
+          <InterviewNote>
+            these checkpoints run against every Silver-layer batch before it&apos;s allowed into Postgres
+            staging — a failed checkpoint blocks the load rather than letting bad data reach Gold silently.
+          </InterviewNote>
+        </div>
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-gray-200">PII Masking Summary</h2>
+        <h2 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">PII Masking Summary</h2>
+        <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <KpiCard
+            title="PII Fields Actively Masked"
+            value={piiFieldsMasked}
+            subtitle="Distinct fields redacted by the PySpark + Presidio Silver-layer transform"
+          />
+          <KpiCard
+            title="Total Masking Events"
+            value={piiEventsTotal}
+            subtitle="Only metadata is logged — original PII values are never stored"
+          />
+        </div>
         <Table
           headers={['Field', 'Total Masked Events', 'Last Seen']}
           rows={piiSummary.map((p) => [p.field_name, String(p.count), formatDate(p.last_seen)])}
           emptyMessage="No PII masking events recorded yet."
         />
-        <p className="mt-2 text-xs text-gray-500">
-          Only metadata is logged. Original PII values are never stored.
-        </p>
+        <div className="mt-3">
+          <InterviewNote>
+            PII is masked (Presidio NER + deterministic hashing) at the Silver layer, before it can ever reach
+            Gold or a dashboard. Only masking metadata is logged here — the original values are never stored,
+            anywhere.
+          </InterviewNote>
+        </div>
       </div>
 
       <div>
-        <KpiCard title="Recent Runs Shown" value={runHistory.length} subtitle="Most recent first" />
+        <h2 className="mb-3 text-lg font-semibold text-gray-800 dark:text-gray-200">Recent Runs</h2>
+        <KpiCard title="Recent Runs Shown" value={runHistory.length} subtitle="Most recent first, across all DAG tasks" />
         <div className="mt-3">
           <Table
             headers={['DAG', 'Task', 'Status', 'Start Time', 'Duration', 'Processed', 'Failed']}
