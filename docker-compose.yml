@@ -480,6 +480,12 @@ services:
     environment:
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      # Server-only — createAdminClient() throws without this (caught
+      # silently by every lib/queries/pipeline.ts function's own
+      # try/catch), which is why the /pipeline admin page and the
+      # PipelineStatusBadge always showed empty/unknown state despite
+      # the underlying Supabase data and grants being correct.
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       KOVALYX_ADMIN_PASSWORD: ${KOVALYX_ADMIN_PASSWORD}
     volumes:
       - ./frontend:/app

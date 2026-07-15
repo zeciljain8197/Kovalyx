@@ -152,18 +152,45 @@ export async function getHomeKpis(): Promise<HomeKpis> {
   }
   try {
     const supabase = createPublicClient()
-    const today = new Date().toISOString().slice(0, 10)
 
-    const [salesRes, alertsRes] = await Promise.all([
+    // "Today" means the most recent day each mart actually has data for,
+    // not the literal calendar date: the pipeline runs periodically
+    // rather than continuously, and the two marts don't necessarily
+    // share a latest date (e.g. sales summary stops at the last order
+    // date, inventory snapshots at the last stock-check date) — filtering
+    // on real "today" would show a misleading empty state between runs
+    // even when real, recent data exists.
+    const [latestSalesDate, latestSnapshotDate] = await Promise.all([
       supabase
         .from('mart_sales_summary')
-        .select('total_gmv, total_orders, avg_order_value')
-        .eq('period_date', today),
+        .select('period_date')
+        .order('period_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then((r) => r.data?.period_date ?? null),
       supabase
         .from('mart_inventory_alerts')
-        .select('alert_level')
-        .eq('snapshot_date', today)
-        .in('alert_level', ['red', 'yellow']),
+        .select('snapshot_date')
+        .order('snapshot_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then((r) => r.data?.snapshot_date ?? null),
+    ])
+
+    const [salesRes, alertsRes] = await Promise.all([
+      latestSalesDate
+        ? supabase
+            .from('mart_sales_summary')
+            .select('total_gmv, total_orders, avg_order_value')
+            .eq('period_date', latestSalesDate)
+        : Promise.resolve({ data: [] }),
+      latestSnapshotDate
+        ? supabase
+            .from('mart_inventory_alerts')
+            .select('alert_level')
+            .eq('snapshot_date', latestSnapshotDate)
+            .in('alert_level', ['red', 'yellow'])
+        : Promise.resolve({ data: [] }),
     ])
 
     const salesRows = salesRes.data ?? []
