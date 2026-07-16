@@ -15,13 +15,6 @@ export interface SalesByCategory {
   return_rate: number
 }
 
-export interface TopProduct {
-  product_name: string
-  category: string
-  total_gmv: number
-  total_orders: number
-}
-
 export interface HomeKpis {
   todayGmv: number
   todayOrders: number
@@ -121,25 +114,6 @@ export async function getSalesByCategory(days: number = 30): Promise<SalesByCate
   } catch {
     return []
   }
-}
-
-/**
- * mart_sales_summary has no product_name column, and a fact_orders ->
- * dim_products join isn't reliably embeddable through PostgREST without
- * a declared foreign key relationship between the two dbt-built tables
- * (not guaranteed to exist). Per the spec's own documented fallback,
- * this substitutes category-level GMV from mart_sales_summary — it's
- * not literally "top products," but it's the safe, always-available
- * substitute rather than a fragile join.
- */
-export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
-  const categories = await getSalesByCategory()
-  return categories.slice(0, limit).map((c) => ({
-    product_name: `Top category: ${c.category}`,
-    category: c.category,
-    total_gmv: c.total_gmv,
-    total_orders: c.total_orders,
-  }))
 }
 
 export async function getHomeKpis(): Promise<HomeKpis> {

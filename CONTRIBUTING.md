@@ -9,8 +9,14 @@ medallion analytics pipeline — issues, PRs, and design feedback are all welcom
 git clone https://github.com/zeciljain8197/Kovalyx.git
 cd kovalyx
 cp .env.example .env   # fill in real values — see the comments in .env.example
-docker compose up -d
+./start.sh
 ```
+
+`start.sh` brings up the full stack and reseeds Vault's dev-mode secrets
+(lost on every container restart). If you're only working on core
+infrastructure and driving ingestion/dbt manually, `docker compose up -d`
+(no profile) works too — just re-run `python scripts/vault_init.py --mode dev`
+after each restart.
 
 `.env.example` documents every variable the stack needs (Kafka SASL credentials,
 MinIO keys, Postgres credentials, Airflow admin account, Vault addressing, etc.).

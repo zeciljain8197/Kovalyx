@@ -115,14 +115,26 @@ export async function getRecentGeResults(limit: number = 20): Promise<GeResult[]
   }
 }
 
+// Same PostgREST 1000-row default cap as getCustomerTierSummary() in
+// customers.ts — the masking audit trail can easily exceed 1000 rows
+// (one row per masked field per source record), so this pages through
+// with .range() rather than silently undercounting real masking events.
 export async function getPiiAuditSummary(): Promise<{ field_name: string; count: number; last_seen: string }[]> {
   try {
     const supabase = createAdminClient()
-    const { data, error } = await supabase
-      .from('kovalyx_pii_audit_log')
-      .select('field_name, masked_at')
+    const PAGE_SIZE = 1000
+    const data: { field_name: string; masked_at: string }[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await supabase
+        .from('kovalyx_pii_audit_log')
+        .select('field_name, masked_at')
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (error || !data) return []
+      if (error) return []
+      if (!page || page.length === 0) break
+      data.push(...page)
+      if (page.length < PAGE_SIZE) break
+    }
 
     const byField = new Map<string, { count: number; last_seen: string }>()
     for (const row of data) {

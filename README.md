@@ -95,14 +95,23 @@ graph LR
 git clone https://github.com/zeciljain8197/Kovalyx.git
 cd kovalyx
 cp .env.example .env   # fill in your values
-docker compose --profile full up -d
+./start.sh
 ```
 
-`--profile full` brings up everything, including Nginx, the event
-producer/consumer, and the frontend/ops-monitor containers. A bare
-`docker compose up -d` (no profile) starts only the core infrastructure
-(Kafka, MinIO, Spark, Postgres, Vault, Airflow, Prometheus/Grafana) —
-useful if you're driving ingestion and dbt manually.
+`start.sh` brings up the full stack (`docker compose --profile full up -d`),
+waits for Vault and Airflow to become healthy, and reseeds Vault's
+dev-mode secrets — which are lost on every container restart, so this
+step always runs, not just on first setup. Pass `--build` to rebuild
+images first.
+
+Prefer to drive it manually? `docker compose --profile full up -d`
+brings up everything, including Nginx, the event producer/consumer, and
+the frontend/ops-monitor containers. A bare `docker compose up -d` (no
+profile) starts only the core infrastructure (Kafka, MinIO, Spark,
+Postgres, Vault, Airflow, Prometheus/Grafana) — useful if you're driving
+ingestion and dbt manually. Either way, Vault still needs a manual
+`python scripts/vault_init.py --mode dev` after every restart if you skip
+`start.sh`.
 
 ### Access
 
