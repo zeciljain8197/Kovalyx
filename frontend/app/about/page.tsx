@@ -6,7 +6,9 @@ import { Card } from '@/components/ui/Card'
 import { InterviewNote } from '@/components/InterviewNote'
 
 export const metadata = {
-  title: 'About — Kovalyx',
+  title: 'About This Project',
+  description:
+    'What Kovalyx is, why it exists, and how the Kafka-to-Supabase medallion pipeline behind this dashboard actually works.',
 }
 
 const TECH_STACK_TABLE: { layer: string; technologies: string }[] = [
