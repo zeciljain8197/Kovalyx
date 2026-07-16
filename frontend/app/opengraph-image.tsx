@@ -1,4 +1,6 @@
 import { ImageResponse } from 'next/og'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 export const alt = 'Kovalyx — Real-time retail analytics pipeline'
 export const size = { width: 1200, height: 630 }
@@ -7,6 +9,9 @@ export const contentType = 'image/png'
 const TECH = ['Kafka', 'PySpark', 'Great Expectations', 'dbt', 'Airflow', 'Supabase', 'Next.js']
 
 export default async function OgImage() {
+  const logoBuffer = readFileSync(join(process.cwd(), 'public', 'logo_dark_theme.png'))
+  const logoSrc = `data:image/png;base64,${logoBuffer.toString('base64')}`
+
   return new ImageResponse(
     (
       <div
@@ -22,16 +27,10 @@ export default async function OgImage() {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div
-              style={{
-                width: 14,
-                height: 56,
-                borderRadius: 4,
-                backgroundColor: '#FFD700',
-              }}
-            />
-            <div style={{ display: 'flex', fontSize: 88, fontWeight: 700, color: '#FFD700' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoSrc} width={72} height={72} style={{ borderRadius: 14 }} alt="" />
+            <div style={{ display: 'flex', fontSize: 88, fontWeight: 700, color: '#F0AA02' }}>
               Kovalyx
             </div>
           </div>
@@ -45,7 +44,7 @@ export default async function OgImage() {
               maxWidth: 920,
             }}
           >
-            Self-hosted, real-time retail analytics pipeline — Kafka through PII-safe,
+            Real-time retail analytics, live and running — Kafka through PII-safe,
             governed Gold-layer marts.
           </div>
         </div>

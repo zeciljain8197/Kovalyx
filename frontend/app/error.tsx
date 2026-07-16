@@ -21,13 +21,13 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         <button
           type="button"
           onClick={reset}
-          className="rounded-md bg-kovalyx-gold px-4 py-2 text-sm font-medium text-gray-950 hover:opacity-90"
+          className="rounded-md bg-kovalyx-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
         >
           Try again
         </button>
         <Link
           href="/pipeline"
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:border-kovalyx-goldText hover:text-kovalyx-goldText dark:border-gray-700 dark:text-gray-300 dark:hover:border-kovalyx-gold dark:hover:text-kovalyx-gold"
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:border-kovalyx-blueText hover:text-kovalyx-blueText dark:border-gray-700 dark:text-gray-300 dark:hover:border-kovalyx-blue dark:hover:text-kovalyx-blue"
         >
           Check pipeline status
         </Link>

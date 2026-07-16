@@ -41,8 +41,8 @@ export function GmvAreaChart({ data }: GmvAreaChartProps) {
       <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="gmvGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#FFD700" stopOpacity={0.4} />
-            <stop offset="95%" stopColor="#FFD700" stopOpacity={0} />
+            <stop offset="5%" stopColor="#F0AA02" stopOpacity={0.4} />
+            <stop offset="95%" stopColor="#F0AA02" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} />
@@ -57,7 +57,7 @@ export function GmvAreaChart({ data }: GmvAreaChartProps) {
         <Area
           type="monotone"
           dataKey="total_gmv"
-          stroke="#FFD700"
+          stroke="#F0AA02"
           strokeWidth={2}
           fill="url(#gmvGradient)"
         />

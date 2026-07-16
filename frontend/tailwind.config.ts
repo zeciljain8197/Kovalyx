@@ -11,20 +11,32 @@ const config: Config = {
     extend: {
       colors: {
         kovalyx: {
+          // Customer loyalty tier colors (Customer Intelligence page) —
+          // a separate concept from the brand palette below, kept
+          // unchanged.
           bronze: '#CD7F32',
           silver: '#C0C0C0',
-          gold: '#FFD700',
-          // Darker equivalents for text on light backgrounds — the raw
-          // brand colors above (especially gold and silver) fail WCAG
-          // contrast as text on white (gold ~1.6:1, silver worse; both
-          // need 4.5:1). Use these via e.g.
-          // `text-kovalyx-bronzeText dark:text-kovalyx-bronze` for any
-          // *text* use of a tier/brand color; backgrounds/fills (chart
-          // areas, active-nav tints, buttons with dark text on top) don't
-          // have this problem and should keep using the bright variants.
           bronzeText: '#7C4A1E',
           silverText: '#57534E',
-          goldText: '#8A6D00',
+
+          // Brand palette, sampled directly from the logo's gradient
+          // (public/logo_dark_theme.png) — it isn't decorative, it maps
+          // onto the medallion architecture itself: blue = ingestion,
+          // teal = transform/quality, gold = the Gold layer. Gold stays
+          // the "brand mark" color (wordmark, success/premium states,
+          // GMV — literally Gold-layer data); blue is the primary
+          // actionable color (links, buttons, active nav, selections);
+          // teal is a secondary accent, mainly in the architecture
+          // diagram's transform stage.
+          gold: '#F0AA02',
+          goldText: '#8A5E00',
+          // #0075FB is the exact sampled logo blue; nudged one step
+          // darker so white text sitting on a solid blue fill (buttons,
+          // active pills) clears 4.5:1 — the raw sample was 4.25:1.
+          blue: '#006EE8',
+          blueText: '#0B5FCC',
+          teal: '#00A9B0',
+          tealText: '#067579',
         },
       },
       fontFamily: {

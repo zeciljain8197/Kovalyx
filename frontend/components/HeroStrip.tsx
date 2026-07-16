@@ -32,15 +32,15 @@ export function HeroStrip() {
         <X size={16} />
       </button>
       <p className="max-w-3xl text-sm text-gray-700 dark:text-gray-300">
-        Kovalyx is a self-hosted, real-time retail analytics pipeline — Kafka streams events through a
-        Bronze/Silver/Gold medallion architecture, masking PII and enforcing data-quality gates before any
-        number reaches this dashboard. Every KPI below is queried live from that governed Gold layer.
+        Same-day sales, inventory, and returns intelligence for retailers — without the enterprise price tag.
+        Every number below is queried live from a real, governed data pipeline: Kafka through PII-safe
+        transforms and automated quality gates to a Supabase Gold layer, running end-to-end.
       </p>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <TechStackStrip />
         <Link
           href="/about"
-          className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-kovalyx-goldText hover:underline dark:text-kovalyx-gold"
+          className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-kovalyx-blueText hover:underline dark:text-kovalyx-blue"
         >
           How it works <ArrowRight size={14} />
         </Link>

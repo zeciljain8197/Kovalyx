@@ -29,7 +29,7 @@ export function DateRangePicker() {
           className={clsx(
             'rounded-md px-3 py-1.5 text-xs font-medium',
             current === preset.value
-              ? 'bg-kovalyx-goldText text-white dark:bg-kovalyx-gold dark:text-gray-950'
+              ? 'bg-kovalyx-blueText text-white dark:bg-kovalyx-blue dark:text-white'
               : 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
           )}
         >

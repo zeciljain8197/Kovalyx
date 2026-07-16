@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { Menu, Moon, Sun } from 'lucide-react'
 import { THEME_STORAGE_KEY } from '@/lib/theme'
 import { useMobileNav } from '@/lib/mobile-nav'
@@ -44,6 +45,10 @@ export function Navbar() {
         >
           <Menu size={20} />
         </button>
+        <div className="shrink-0 lg:hidden">
+          <Image src="/logo_light_theme.png" alt="" width={26} height={26} className="rounded dark:hidden" />
+          <Image src="/logo_dark_theme.png" alt="" width={26} height={26} className="hidden rounded dark:block" />
+        </div>
         <span className="shrink-0 text-lg font-bold text-kovalyx-goldText dark:text-kovalyx-gold">Kovalyx</span>
         <span className="hidden text-gray-300 dark:text-gray-600 sm:inline">/</span>
         <span className="hidden truncate text-sm text-gray-600 dark:text-gray-300 sm:inline">{title}</span>

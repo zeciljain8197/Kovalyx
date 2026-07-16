@@ -3,7 +3,6 @@ import { KpiCard } from '@/components/KpiCard'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Table } from '@/components/ui/Table'
-import { InterviewNote } from '@/components/InterviewNote'
 
 export const revalidate = 60
 
@@ -42,7 +41,8 @@ export default async function PipelinePage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline Health</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Live run history, data-quality checks, and PII audit trail — proof this is a real, running system, not a mockup.
+          Live run history, automated data-quality checks, and a full PII-masking audit trail for every
+          pipeline run.
         </p>
       </div>
 
@@ -95,12 +95,6 @@ export default async function PipelinePage() {
           ])}
           emptyMessage="No Great Expectations results recorded yet."
         />
-        <div className="mt-3">
-          <InterviewNote>
-            these checkpoints run against every Silver-layer batch before it&apos;s allowed into Postgres
-            staging — a failed checkpoint blocks the load rather than letting bad data reach Gold silently.
-          </InterviewNote>
-        </div>
       </div>
 
       <div>
@@ -122,13 +116,6 @@ export default async function PipelinePage() {
           rows={piiSummary.map((p) => [p.field_name, String(p.count), formatDate(p.last_seen)])}
           emptyMessage="No PII masking events recorded yet."
         />
-        <div className="mt-3">
-          <InterviewNote>
-            PII is masked (Presidio NER + deterministic hashing) at the Silver layer, before it can ever reach
-            Gold or a dashboard. Only masking metadata is logged here — the original values are never stored,
-            anywhere.
-          </InterviewNote>
-        </div>
       </div>
 
       <div>

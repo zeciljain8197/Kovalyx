@@ -79,7 +79,7 @@ export function InventoryStatusTable({ data }: InventoryStatusTableProps) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by product name..."
-          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-kovalyx-goldText focus:outline-none dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:placeholder:text-gray-500 dark:focus:border-kovalyx-gold"
+          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 placeholder:text-gray-400 focus:border-kovalyx-blueText focus:outline-none dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:placeholder:text-gray-500 dark:focus:border-kovalyx-blue"
         />
         <div className="flex gap-1">
           {(['all', 'red', 'yellow', 'green'] as FilterLevel[]).map((level) => (
@@ -90,7 +90,7 @@ export function InventoryStatusTable({ data }: InventoryStatusTableProps) {
               className={clsx(
                 'rounded-md px-3 py-1.5 text-xs font-medium capitalize',
                 filterLevel === level
-                  ? 'bg-kovalyx-goldText text-white dark:bg-kovalyx-gold dark:text-gray-950'
+                  ? 'bg-kovalyx-blueText text-white dark:bg-kovalyx-blue dark:text-white'
                   : 'bg-gray-100 text-gray-500 hover:text-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
               )}
             >

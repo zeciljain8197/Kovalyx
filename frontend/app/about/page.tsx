@@ -2,8 +2,6 @@ import Link from 'next/link'
 import { ArrowRight, Github } from 'lucide-react'
 import { ArchitectureDiagram } from '@/components/ArchitectureDiagram'
 import { TechStackStrip } from '@/components/TechStackStrip'
-import { Card } from '@/components/ui/Card'
-import { InterviewNote } from '@/components/InterviewNote'
 
 export const metadata = {
   title: 'About This Project',
@@ -102,11 +100,6 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Architecture</h2>
         <ArchitectureDiagram />
-        <InterviewNote>
-          the Bronze/Silver/Gold split isn&apos;t just naming — each layer has a distinct contract (raw and
-          replayable, cleaned and PII-safe, modeled and query-ready), and every arrow above is an Airflow task,
-          not a manual step.
-        </InterviewNote>
       </section>
 
       <section className="space-y-3">
@@ -139,14 +132,17 @@ export default function AboutPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Design Q&amp;A</h2>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">How It's Built</h2>
+        <p className="max-w-3xl text-sm text-gray-500 dark:text-gray-400">
+          The engineering decisions behind the pipeline above, in more depth.
+        </p>
         <div className="max-w-3xl space-y-2">
           {QUESTIONS.map((item) => (
             <details
               key={item.q}
               className="group rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"
             >
-              <summary className="cursor-pointer text-sm font-medium text-gray-800 marker:text-kovalyx-goldText dark:text-gray-200 dark:marker:text-kovalyx-gold">
+              <summary className="cursor-pointer text-sm font-medium text-gray-800 marker:text-kovalyx-blueText dark:text-gray-200 dark:marker:text-kovalyx-blue">
                 {item.q}
               </summary>
               <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{item.a}</p>
@@ -158,7 +154,7 @@ export default function AboutPage() {
       <div className="flex flex-wrap gap-3 pt-2">
         <Link
           href="/pipeline"
-          className="inline-flex items-center gap-2 rounded-md bg-kovalyx-gold px-4 py-2 text-sm font-medium text-gray-950 hover:opacity-90"
+          className="inline-flex items-center gap-2 rounded-md bg-kovalyx-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
         >
           See it running <ArrowRight size={14} />
         </Link>
@@ -166,7 +162,7 @@ export default function AboutPage() {
           href="https://github.com/zeciljain8197/Kovalyx"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:border-kovalyx-goldText hover:text-kovalyx-goldText dark:border-gray-700 dark:text-gray-300 dark:hover:border-kovalyx-gold dark:hover:text-kovalyx-gold"
+          className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:border-kovalyx-blueText hover:text-kovalyx-blueText dark:border-gray-700 dark:text-gray-300 dark:hover:border-kovalyx-blue dark:hover:text-kovalyx-blue"
         >
           <Github size={14} /> View source on GitHub
         </a>

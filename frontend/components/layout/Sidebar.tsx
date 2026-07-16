@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { clsx } from 'clsx'
 import { BarChart2, Users, Package, RotateCcw, Activity, Info, X, LucideIcon } from 'lucide-react'
@@ -43,7 +44,23 @@ export function Sidebar() {
         )}
       >
         <div className="flex h-16 items-center justify-between px-6">
-          <span className="text-xl font-bold text-kovalyx-goldText dark:text-kovalyx-gold">Kovalyx</span>
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/logo_light_theme.png"
+              alt=""
+              width={32}
+              height={32}
+              className="rounded-md dark:hidden"
+            />
+            <Image
+              src="/logo_dark_theme.png"
+              alt=""
+              width={32}
+              height={32}
+              className="hidden rounded-md dark:block"
+            />
+            <span className="text-xl font-bold text-kovalyx-goldText dark:text-kovalyx-gold">Kovalyx</span>
+          </div>
           <button
             type="button"
             onClick={close}
@@ -65,7 +82,7 @@ export function Sidebar() {
                 className={clsx(
                   'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                   isActive
-                    ? 'bg-kovalyx-goldText/10 text-kovalyx-goldText dark:bg-kovalyx-gold/10 dark:text-kovalyx-gold'
+                    ? 'bg-kovalyx-blueText/10 text-kovalyx-blueText dark:bg-kovalyx-blue/10 dark:text-kovalyx-blue'
                     : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-900 dark:hover:text-gray-200'
                 )}
               >

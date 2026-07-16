@@ -16,26 +16,39 @@ import {
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 
+type Layer = 'bronze' | 'silver' | 'gold'
+
 interface Stage {
   icon: typeof Send
   label: string
   detail: string
+  layer: Layer
+}
+
+// Icon color tracks the medallion layer each stage belongs to — blue for
+// Bronze/ingestion, teal for Silver/transform, gold for the Gold layer
+// itself — so the diagram's color coding matches the architecture it's
+// describing, not just decoration.
+const LAYER_CLASSES: Record<Layer, string> = {
+  bronze: 'text-kovalyx-blueText dark:text-kovalyx-blue',
+  silver: 'text-kovalyx-tealText dark:text-kovalyx-teal',
+  gold: 'text-kovalyx-goldText dark:text-kovalyx-gold',
 }
 
 const STAGES: Stage[] = [
-  { icon: Send, label: 'Kafka Producer', detail: 'Faker-generated live events' },
-  { icon: Waypoints, label: 'Kafka', detail: 'kovalyx.events topic' },
-  { icon: Database, label: 'Bronze (MinIO)', detail: 'Raw landing zone' },
-  { icon: ShieldCheck, label: 'PySpark + Presidio', detail: 'Silver transform, PII masking' },
-  { icon: CheckCircle2, label: 'Great Expectations', detail: 'Quality gates' },
-  { icon: Server, label: 'Postgres Loader', detail: 'Staging schema' },
-  { icon: Layers, label: 'dbt', detail: 'Staging → marts' },
-  { icon: Cloud, label: 'Supabase (Gold)', detail: 'Governed analytics marts' },
+  { icon: Send, label: 'Kafka Producer', detail: 'Faker-generated live events', layer: 'bronze' },
+  { icon: Waypoints, label: 'Kafka', detail: 'kovalyx.events topic', layer: 'bronze' },
+  { icon: Database, label: 'Bronze (MinIO)', detail: 'Raw landing zone', layer: 'bronze' },
+  { icon: ShieldCheck, label: 'PySpark + Presidio', detail: 'Silver transform, PII masking', layer: 'silver' },
+  { icon: CheckCircle2, label: 'Great Expectations', detail: 'Quality gates', layer: 'silver' },
+  { icon: Server, label: 'Postgres Loader', detail: 'Staging schema', layer: 'silver' },
+  { icon: Layers, label: 'dbt', detail: 'Staging → marts', layer: 'gold' },
+  { icon: Cloud, label: 'Supabase (Gold)', detail: 'Governed analytics marts', layer: 'gold' },
 ]
 
 const OUTPUTS: Stage[] = [
-  { icon: LayoutDashboard, label: 'Next.js Dashboard', detail: 'This site, on Vercel' },
-  { icon: BarChart3, label: 'Streamlit', detail: 'Internal ops/audit monitor' },
+  { icon: LayoutDashboard, label: 'Next.js Dashboard', detail: 'This site, on Vercel', layer: 'gold' },
+  { icon: BarChart3, label: 'Streamlit', detail: 'Internal ops/audit monitor', layer: 'gold' },
 ]
 
 function Connector() {
@@ -51,7 +64,7 @@ function StageCard({ stage }: { stage: Stage }) {
   const Icon = stage.icon
   return (
     <Card className="flex w-full shrink-0 flex-col items-center gap-1 p-3 text-center lg:w-36">
-      <Icon size={22} className="text-kovalyx-goldText dark:text-kovalyx-gold" />
+      <Icon size={22} className={LAYER_CLASSES[stage.layer]} />
       <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{stage.label}</p>
       <p className="text-[11px] leading-tight text-gray-500 dark:text-gray-500">{stage.detail}</p>
     </Card>
@@ -80,8 +93,20 @@ export function ArchitectureDiagram() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-gray-500 dark:text-gray-500">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-kovalyx-blue" /> Bronze — ingestion
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-kovalyx-teal" /> Silver — transform &amp; quality
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-kovalyx-gold" /> Gold — governed marts
+        </span>
+      </div>
+
       <Card className="flex items-center justify-center gap-3 bg-gray-50 py-3 dark:bg-gray-900/50">
-        <Workflow size={18} className="text-kovalyx-goldText dark:text-kovalyx-gold" />
+        <Workflow size={18} className="text-kovalyx-blueText dark:text-kovalyx-blue" />
         <p className="text-xs text-gray-600 dark:text-gray-400">
           <span className="font-semibold text-gray-800 dark:text-gray-200">Apache Airflow</span> orchestrates
           every stage above on a 2-hour schedule — producer through dbt.
