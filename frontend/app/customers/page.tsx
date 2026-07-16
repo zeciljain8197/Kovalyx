@@ -42,7 +42,7 @@ export default async function CustomersPage() {
         <KpiCard
           title="Total Customers"
           value={tierSummary.total_customers}
-          subtitle="All customers with at least one order"
+          subtitle="All registered customers, ordered or not"
         />
         <KpiCard
           title="Average Total Spent"

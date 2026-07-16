@@ -16,6 +16,10 @@
 -- and masked_customer_phone are excluded — fixed mask values with no
 -- analytical meaning. dbt adds dbt_scd_id, dbt_updated_at, dbt_valid_from,
 -- dbt_valid_to, dbt_is_current automatically.
+-- Sources from dim_customers, not stg_customers: total_orders/total_spent
+-- are order-aggregates computed in dim_customers.sql, not raw staged
+-- attributes, and "spending growth over time" is exactly what changes on
+-- that computed value as new orders land.
 SELECT
     customer_id,
     hashed_email,
@@ -23,5 +27,5 @@ SELECT
     registration_date,
     total_orders,
     total_spent
-FROM {{ ref('stg_customers') }}
+FROM {{ ref('dim_customers') }}
 {% endsnapshot %}

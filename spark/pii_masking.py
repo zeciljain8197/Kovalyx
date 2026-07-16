@@ -18,15 +18,17 @@ Masking rules:
     shipping_address   -> NULL (fully suppressed)
     card_last4/card_type -> passed through unchanged (not PII)
 
-Presidio usage: customer_name/customer_phone run a real
-AnalyzerEngine.analyze() + AnonymizerEngine.anonymize() pass, but the
-anonymize operator's replacement value is the fixed literal either way —
-these two columns are 100% known-PII by schema position, so gating the
-mask on NER confidence would risk a silent leak on a detection miss.
-shipping_address runs AnalyzerEngine.analyze() purely for audit richness:
-the entity types Presidio finds there (LOCATION/PERSON/etc.) are folded
+Presidio usage: customer_name/customer_phone/shipping_address all run a
+real AnalyzerEngine.analyze() pass, kept for the audit trail's "a real
+detection pass ran here" value, but none of them let the result decide
+the masked output — these fields are 100% known-PII by schema position,
+so gating the mask on NER confidence would risk a silent leak on a
+detection miss (or, as happened before this was unconditional, a partial
+span-replace leaving surrounding text like a title/suffix in place
+instead of the intended clean literal). shipping_address's analyze()
+call additionally folds the entity types found (LOCATION/PERSON/etc.)
 into the audit record's masking_action so a compliance reviewer can see
-what kind of PII was actually suppressed, even though the DataFrame value
+what kind of PII was actually present, even though the DataFrame value
 itself is unconditionally nulled either way.
 """
 
@@ -37,8 +39,6 @@ import logging
 from functools import reduce
 
 from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.functions import udf
@@ -47,18 +47,16 @@ from pyspark.sql.types import StringType
 logger = logging.getLogger("kovalyx.pii_masking")
 
 _PRESIDIO_ANALYZER: AnalyzerEngine | None = None
-_PRESIDIO_ANONYMIZER: AnonymizerEngine | None = None
 
 
-def _presidio_engines() -> tuple[AnalyzerEngine, AnonymizerEngine]:
+def _presidio_analyzer() -> AnalyzerEngine:
     """Lazily initializes Presidio once per Python worker process, not
     once per row — AnalyzerEngine construction loads a spaCy model, which
     is far too expensive to redo inside a per-row UDF call."""
-    global _PRESIDIO_ANALYZER, _PRESIDIO_ANONYMIZER
+    global _PRESIDIO_ANALYZER
     if _PRESIDIO_ANALYZER is None:
         _PRESIDIO_ANALYZER = AnalyzerEngine()
-        _PRESIDIO_ANONYMIZER = AnonymizerEngine()
-    return _PRESIDIO_ANALYZER, _PRESIDIO_ANONYMIZER
+    return _PRESIDIO_ANALYZER
 
 
 def _hash_email(value: str | None) -> str | None:
@@ -69,42 +67,37 @@ def _hash_email(value: str | None) -> str | None:
 
 
 def _mask_name(text: str | None) -> str | None:
-    """Runs Presidio detection + anonymization for PERSON entities, always
-    landing on the literal "MASKED_NAME" — via the anonymizer's replace
-    operator when Presidio finds a match, or a direct fallback if it
-    doesn't, so a NER miss can never leave the real name in place."""
+    """customer_name is 100% known-PII by schema position, so the whole
+    field is unconditionally masked to the literal "MASKED_NAME" — a
+    Presidio NER pass still runs (kept for the audit trail's "a real
+    detection pass ran here" value), but its result no longer decides
+    the output. It used to: the anonymizer's span-replace operator only
+    substitutes the matched span, so a partial match (e.g. "Dr. Jane
+    Smith" matching only "Jane Smith") left surrounding text in place —
+    "Dr. MASKED_NAME" instead of the intended clean literal. Gating an
+    unconditional mask on NER confidence only made it less predictable,
+    never more correct."""
     if text is None:
         return None
     try:
-        analyzer, anonymizer = _presidio_engines()
-        results = analyzer.analyze(text=text, language="en", entities=["PERSON"])
-        if results:
-            return anonymizer.anonymize(
-                text=text,
-                analyzer_results=results,
-                operators={"PERSON": OperatorConfig("replace", {"new_value": "MASKED_NAME"})},
-            ).text
+        analyzer = _presidio_analyzer()
+        analyzer.analyze(text=text, language="en", entities=["PERSON"])
     except Exception:  # noqa: BLE001
-        logger.warning("Presidio analysis failed for customer_name — falling back to deterministic mask", exc_info=True)
+        logger.warning("Presidio analysis failed for customer_name — masking unconditionally regardless", exc_info=True)
     return "MASKED_NAME"
 
 
 def _mask_phone(text: str | None) -> str | None:
-    """Same Presidio-backed-with-fallback pattern as _mask_name(), scoped
-    to PHONE_NUMBER entities."""
+    """Same unconditional-mask pattern as _mask_name(), scoped to
+    PHONE_NUMBER entities — see that docstring for why the Presidio
+    result no longer decides the output."""
     if text is None:
         return None
     try:
-        analyzer, anonymizer = _presidio_engines()
-        results = analyzer.analyze(text=text, language="en", entities=["PHONE_NUMBER"])
-        if results:
-            return anonymizer.anonymize(
-                text=text,
-                analyzer_results=results,
-                operators={"PHONE_NUMBER": OperatorConfig("replace", {"new_value": "MASKED_PHONE"})},
-            ).text
+        analyzer = _presidio_analyzer()
+        analyzer.analyze(text=text, language="en", entities=["PHONE_NUMBER"])
     except Exception:  # noqa: BLE001
-        logger.warning("Presidio analysis failed for customer_phone — falling back to deterministic mask", exc_info=True)
+        logger.warning("Presidio analysis failed for customer_phone — masking unconditionally regardless", exc_info=True)
     return "MASKED_PHONE"
 
 
@@ -117,7 +110,7 @@ def _describe_address_suppression(text: str | None) -> str:
     if text is None:
         return "suppress"
     try:
-        analyzer, _ = _presidio_engines()
+        analyzer = _presidio_analyzer()
         results = analyzer.analyze(text=text, language="en", entities=["LOCATION", "PERSON"])
         entity_types = sorted({r.entity_type for r in results})
         if entity_types:
@@ -163,7 +156,7 @@ class PresidioMasker:
         self.jdbc_props = jdbc_props
         # Fail fast here (spaCy model missing, etc.) instead of failing
         # deep inside a UDF on the first masked row.
-        _presidio_engines()
+        _presidio_analyzer()
         self._audit_frames: list[DataFrame] = []
         self._masked_count = 0
 

@@ -177,19 +177,61 @@ def generate_customers(faker: Faker, num_customers: int, days: int) -> pd.DataFr
 def generate_orders(customers: pd.DataFrame, products: pd.DataFrame, days: int) -> pd.DataFrame:
     """One row per order — the contract has no order_line_id/sku, so each
     order is modeled as a single-product-line transaction. A customer can
-    place multiple distinct orders on the same or different days."""
+    place multiple distinct orders on the same or different days.
+
+    Customer selection isn't pure-uniform: ~55% of orders go to a repeat
+    customer (weighted toward higher-loyalty, tier-correlated customers),
+    the rest to a customer placing their first order. A prior version drew
+    every order's customer uniformly at random with no memory of who'd
+    ordered before, which made mart_customer_cohorts' week-over-week
+    retention pure noise — a customer's odds of reordering later had no
+    relationship to whether they'd ordered at all. Only customers already
+    registered as of `order_date` are eligible, so no customer's first
+    order can predate their own registration_date and get silently
+    dropped by that mart's `order_week >= cohort_week` filter.
+    """
     rows = []
     customer_records = customers.to_dict("records")
     today = date.today()
 
+    tier_loyalty = {"gold": 0.75, "silver": 0.45, "bronze": 0.2}
+    loyalty = {c["customer_id"]: tier_loyalty[c["tier"]] for c in customer_records}
+
+    # Customers become order-eligible on their own registration date, in
+    # registration order, so the "new customer" pool on any simulated day
+    # matches exactly who has actually registered by then.
+    by_registration = sorted(customer_records, key=lambda c: c["registration_date"])
+    reg_idx = 0
+    unordered_pool: list[dict] = []
+    ordered_customers: list[dict] = []
+
     for day_offset in range(days, 0, -1):
         order_date = today - timedelta(days=day_offset)
+        order_date_str = order_date.strftime("%Y-%m-%d")
+
+        while reg_idx < len(by_registration) and by_registration[reg_idx]["registration_date"] <= order_date_str:
+            unordered_pool.append(by_registration[reg_idx])
+            reg_idx += 1
+
         # Weekend bump, slow ramp — gives the GMV trend chart real shape.
         base_orders = 40 if order_date.weekday() < 5 else 65
         num_orders_today = max(5, int(random.gauss(base_orders, base_orders * 0.2)))
 
         for _ in range(num_orders_today):
-            customer = random.choice(customer_records)
+            if ordered_customers and random.random() < 0.55:
+                # Weighted pick favoring higher-loyalty customers without a
+                # full weighted-sample dependency: sample a few candidates
+                # and keep the one with the highest loyalty-scaled draw.
+                candidates = random.sample(ordered_customers, k=min(15, len(ordered_customers)))
+                customer = max(candidates, key=lambda c: loyalty[c["customer_id"]] * random.random())
+            elif unordered_pool:
+                customer = unordered_pool.pop(random.randrange(len(unordered_pool)))
+                ordered_customers.append(customer)
+            elif ordered_customers:
+                customer = random.choice(ordered_customers)
+            else:
+                continue  # nobody registered yet (only possible on day 1)
+
             product = products.sample(n=1).iloc[0]
             quantity = random.randint(1, 4)
             unit_price = float(product["unit_price"])
@@ -202,7 +244,7 @@ def generate_orders(customers: pd.DataFrame, products: pd.DataFrame, days: int) 
                     "quantity": quantity,
                     "unit_price": unit_price,
                     "order_amount": order_amount,
-                    "order_date": order_date.strftime("%Y-%m-%d"),
+                    "order_date": order_date_str,
                     "status": random.choices(ORDER_STATUSES, weights=ORDER_STATUS_WEIGHTS)[0],
                     "shipping_address": customer["shipping_address"],
                     "card_last4": f"{random.randint(0, 9999):04d}",
@@ -215,7 +257,20 @@ def generate_orders(customers: pd.DataFrame, products: pd.DataFrame, days: int) 
 def generate_inventory_snapshots(products: pd.DataFrame, days: int) -> pd.DataFrame:
     """Walks each product's stock forward from its products.csv seed value
     for `days` days. reorder_threshold is joined from products, never
-    re-randomized, so inventory.csv and products.csv always match."""
+    re-randomized, so inventory.csv and products.csv always match.
+
+    Restocking is threshold-triggered — once a day's projected stock dips
+    within 2x its reorder point, there's a real chance a shipment arrives
+    that day — rather than a flat 10%-per-day roll disconnected from
+    actual stock level. The flat-roll version depleted every product by
+    up to 25 units *every* day but only replenished on ~1 day in 10, a
+    structural downward drift that stockouts most products well before
+    day 90 (clamped at 0) instead of the occasional low-stock dip a real
+    replenishment system produces — 94 of 200 products (47%) ended up
+    below their reorder threshold on the final day, which reads as "this
+    retailer is in crisis" rather than a healthy business occasionally
+    catching a reorder point.
+    """
     rows = []
     today = date.today()
     stock_levels = dict(zip(products["product_id"], products["current_stock"]))
@@ -225,15 +280,21 @@ def generate_inventory_snapshots(products: pd.DataFrame, days: int) -> pd.DataFr
         snapshot_date = today - timedelta(days=day_offset)
         for product_id in products["product_id"]:
             units_sold = random.randint(0, 25)
-            units_received = random.randint(0, 150) if random.random() < 0.1 else 0
-            stock_levels[product_id] = max(0, stock_levels[product_id] - units_sold + units_received)
+            reorder_threshold = reorder_by_product[product_id]
+            projected = stock_levels[product_id] - units_sold
+
+            units_received = 0
+            if projected < reorder_threshold * 1.4 and random.random() < 0.35:
+                units_received = random.randint(reorder_threshold * 3, reorder_threshold * 6)
+
+            stock_levels[product_id] = max(0, projected + units_received)
             rows.append(
                 {
                     "inventory_id": f"INV-{uuid.uuid4().hex[:10]}",
                     "product_id": product_id,
                     "date": snapshot_date.strftime("%Y-%m-%d"),
                     "stock_level": stock_levels[product_id],
-                    "reorder_threshold": reorder_by_product[product_id],
+                    "reorder_threshold": reorder_threshold,
                     "units_sold": units_sold,
                     "units_received": units_received,
                 }
