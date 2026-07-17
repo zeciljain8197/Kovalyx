@@ -59,9 +59,9 @@ export default async function PipelinePage() {
             />
             <KpiCard
               title="GE Passed"
-              value={lastRun.ge_passed ? 'Passed' : 'Failed'}
+              value={lastRun.ge_passed === null ? 'N/A' : lastRun.ge_passed ? 'Passed' : 'Failed'}
               subtitle="Great Expectations checkpoint status"
-              variant={lastRun.ge_passed ? 'success' : 'danger'}
+              variant={lastRun.ge_passed === null ? 'default' : lastRun.ge_passed ? 'success' : 'danger'}
             />
           </div>
         ) : (

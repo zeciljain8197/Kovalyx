@@ -109,11 +109,12 @@ default_args = {
     "retries": 3,
     "retry_delay": timedelta(minutes=5),
     "retry_exponential_backoff": True,
-    "email_on_failure": True,
-    # Same var.value.get(...) fix as ENV_TEMPLATE above — an unset
-    # Variable here would otherwise crash email rendering on every task
-    # failure, masking the task's actual error behind a Jinja exception.
-    "email": ["{{ var.value.get('kovalyx_alert_email', '') }}"],
+    # No SMTP server exists anywhere in this self-hosted stack, so
+    # email_on_failure=True previously guaranteed a second, unrelated
+    # ConnectionRefusedError on every task failure — burying the real
+    # error under an email-delivery traceback. Same "log-only, no email"
+    # convention as sla_miss_callback below, for the same reason.
+    "email_on_failure": False,
     "sla": timedelta(minutes=90),
 }
 

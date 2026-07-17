@@ -33,9 +33,13 @@ snapshots:
     +target_schema: marts
     +strategy: check
     +unique_key: customer_id
+    # dim_customers_snapshot.sql overrides this with its own check_cols
+    # (tier, total_spent, total_orders), so this default only "works" by
+    # never actually being used — shipping_address doesn't exist in that
+    # snapshot's select at all (excluded post-masking, see stg_orders.sql),
+    # and would error if this default were ever relied on directly.
     +check_cols:
       - tier
-      - shipping_address
 
 vars:
   kovalyx_start_date: '2024-01-01'

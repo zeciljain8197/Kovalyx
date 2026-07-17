@@ -25,11 +25,19 @@ function formatCohortWeekLabel(dateStr: string): string {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`
 }
 
+/**
+ * Thresholds are calibrated to real e-commerce repeat-purchase cohort
+ * retention, not SaaS-style day-1 retention (which routinely sits in the
+ * 80-95% range). Week-over-week repeat purchase rates in this range —
+ * 40%+ strong, single digits by week 10+ — are normal and expected; the
+ * previous thresholds required 75%+ for green, which this business's
+ * data can never reach (its real ceiling is ~74%), so every cell rendered
+ * red or orange regardless of how the cohort actually performed.
+ */
 function cellColor(retentionRate: number): string {
-  if (retentionRate >= 0.9) return 'bg-green-500'
-  if (retentionRate >= 0.75) return 'bg-green-700'
-  if (retentionRate >= 0.5) return 'bg-yellow-600'
-  if (retentionRate >= 0.25) return 'bg-orange-700'
+  if (retentionRate >= 0.4) return 'bg-green-600'
+  if (retentionRate >= 0.2) return 'bg-yellow-600'
+  if (retentionRate >= 0.1) return 'bg-orange-700'
   return 'bg-red-900'
 }
 
@@ -94,6 +102,13 @@ export function CohortHeatmap({ data }: CohortHeatmapProps) {
           ))}
         </tbody>
       </table>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <span className="font-medium">Retention rate:</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-green-600" /> 40%+</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-yellow-600" /> 20-40%</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-orange-700" /> 10-20%</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-red-900" /> &lt;10%</span>
+      </div>
     </div>
   )
 }

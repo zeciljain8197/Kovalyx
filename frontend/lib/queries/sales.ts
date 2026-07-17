@@ -5,7 +5,6 @@ export interface DailySales {
   total_gmv: number
   total_orders: number
   avg_order_value: number
-  unique_customers: number
 }
 
 export interface SalesByCategory {
@@ -37,34 +36,51 @@ export async function getDailySalesTrend(days: number = 30): Promise<DailySales[
     const since = new Date()
     since.setDate(since.getDate() - days)
 
-    const { data, error } = await supabase
-      .from('mart_sales_summary')
-      .select('period_date, total_gmv, total_orders, avg_order_value, unique_customers')
-      .gte('period_date', since.toISOString().slice(0, 10))
-      .order('period_date', { ascending: true })
+    // Paginated for the same reason as getCustomerTierSummary() in
+    // customers.ts: mart_sales_summary is already at 600+ rows, and the
+    // 6-month range preset alone requests more rows than PostgREST's
+    // default 1000-row cap would silently return.
+    const PAGE_SIZE = 1000
+    const data: { period_date: string; total_gmv: number; total_orders: number }[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await supabase
+        .from('mart_sales_summary')
+        .select('period_date, total_gmv, total_orders')
+        .gte('period_date', since.toISOString().slice(0, 10))
+        .order('period_date', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (error || !data) return []
+      if (error) return []
+      if (!page || page.length === 0) break
+      data.push(...page)
+      if (page.length < PAGE_SIZE) break
+    }
 
-    const byDate = new Map<string, DailySales>()
+    // avg_order_value is derived from the summed totals (a true weighted
+    // average), not averaged across category rows — averaging per-category
+    // avg_order_value values directly ignores each category's order volume
+    // and produces a number nothing else on the page agrees with.
+    const byDate = new Map<string, { total_gmv: number; total_orders: number }>()
     for (const row of data) {
       const existing = byDate.get(row.period_date)
       if (existing) {
         existing.total_gmv += Number(row.total_gmv ?? 0)
         existing.total_orders += Number(row.total_orders ?? 0)
-        existing.unique_customers += Number(row.unique_customers ?? 0)
-        existing.avg_order_value =
-          (existing.avg_order_value + Number(row.avg_order_value ?? 0)) / 2
       } else {
         byDate.set(row.period_date, {
-          period_date: row.period_date,
           total_gmv: Number(row.total_gmv ?? 0),
           total_orders: Number(row.total_orders ?? 0),
-          avg_order_value: Number(row.avg_order_value ?? 0),
-          unique_customers: Number(row.unique_customers ?? 0),
         })
       }
     }
-    return Array.from(byDate.values()).sort((a, b) => a.period_date.localeCompare(b.period_date))
+    return Array.from(byDate.entries())
+      .map(([period_date, v]) => ({
+        period_date,
+        total_gmv: v.total_gmv,
+        total_orders: v.total_orders,
+        avg_order_value: v.total_orders > 0 ? v.total_gmv / v.total_orders : 0,
+      }))
+      .sort((a, b) => a.period_date.localeCompare(b.period_date))
   } catch {
     return []
   }
@@ -76,28 +92,39 @@ export async function getSalesByCategory(days: number = 30): Promise<SalesByCate
     const since = new Date()
     since.setDate(since.getDate() - days)
 
-    const { data, error } = await supabase
-      .from('mart_sales_summary')
-      .select('category, total_gmv, total_orders, return_rate')
-      .gte('period_date', since.toISOString().slice(0, 10))
+    // Paginated — see getDailySalesTrend() above for why.
+    const PAGE_SIZE = 1000
+    const data: { category: string | null; total_gmv: number; total_orders: number; returned_orders: number }[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await supabase
+        .from('mart_sales_summary')
+        .select('category, total_gmv, total_orders, returned_orders')
+        .gte('period_date', since.toISOString().slice(0, 10))
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (error || !data) return []
+      if (error) return []
+      if (!page || page.length === 0) break
+      data.push(...page)
+      if (page.length < PAGE_SIZE) break
+    }
 
-    const byCategory = new Map<string, { total_gmv: number; total_orders: number; returnRateSum: number; n: number }>()
+    // return_rate is derived from summed returned_orders/total_orders (a
+    // true weighted rate), not averaged across daily rows — averaging the
+    // per-row return_rate directly weights a 2-order day the same as a
+    // 200-order day.
+    const byCategory = new Map<string, { total_gmv: number; total_orders: number; returned_orders: number }>()
     for (const row of data) {
       const key = row.category ?? 'Unknown'
       const existing = byCategory.get(key)
       if (existing) {
         existing.total_gmv += Number(row.total_gmv ?? 0)
         existing.total_orders += Number(row.total_orders ?? 0)
-        existing.returnRateSum += Number(row.return_rate ?? 0)
-        existing.n += 1
+        existing.returned_orders += Number(row.returned_orders ?? 0)
       } else {
         byCategory.set(key, {
           total_gmv: Number(row.total_gmv ?? 0),
           total_orders: Number(row.total_orders ?? 0),
-          returnRateSum: Number(row.return_rate ?? 0),
-          n: 1,
+          returned_orders: Number(row.returned_orders ?? 0),
         })
       }
     }
@@ -107,7 +134,7 @@ export async function getSalesByCategory(days: number = 30): Promise<SalesByCate
         category,
         total_gmv: v.total_gmv,
         total_orders: v.total_orders,
-        return_rate: v.n > 0 ? v.returnRateSum / v.n : 0,
+        return_rate: v.total_orders > 0 ? v.returned_orders / v.total_orders : 0,
       }))
       .sort((a, b) => b.total_gmv - a.total_gmv)
       .slice(0, 10)
@@ -155,7 +182,7 @@ export async function getHomeKpis(): Promise<HomeKpis> {
       latestSalesDate
         ? supabase
             .from('mart_sales_summary')
-            .select('total_gmv, total_orders, avg_order_value')
+            .select('total_gmv, total_orders')
             .eq('period_date', latestSalesDate)
         : Promise.resolve({ data: [] }),
       latestSnapshotDate
@@ -170,9 +197,11 @@ export async function getHomeKpis(): Promise<HomeKpis> {
     const salesRows = salesRes.data ?? []
     const todayGmv = salesRows.reduce((sum, r) => sum + Number(r.total_gmv ?? 0), 0)
     const todayOrders = salesRows.reduce((sum, r) => sum + Number(r.total_orders ?? 0), 0)
-    const todayAov = salesRows.length > 0
-      ? salesRows.reduce((sum, r) => sum + Number(r.avg_order_value ?? 0), 0) / salesRows.length
-      : 0
+    // True weighted AOV (matches the "Today's GMV ÷ today's orders"
+    // subtitle on the homepage) — averaging each category row's own
+    // avg_order_value ignored order volume per category and previously
+    // produced a number that didn't match its own subtitle's claim.
+    const todayAov = todayOrders > 0 ? todayGmv / todayOrders : 0
 
     return {
       todayGmv,

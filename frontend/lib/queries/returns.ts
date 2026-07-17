@@ -7,8 +7,6 @@ export interface ReturnTrend {
   total_orders: number
   returned_orders: number
   return_rate: number
-  prev_month_return_rate: number | null
-  return_rate_change: number | null
 }
 
 export interface ReturnsByCategory {
@@ -44,37 +42,40 @@ export async function getReturnTrends(months: number = 6): Promise<ReturnTrend[]
     const since = new Date()
     since.setMonth(since.getMonth() - months)
 
-    const { data, error } = await supabase
-      .from('mart_return_rates')
-      .select('period_date, year, month, total_orders, returned_orders, return_rate, prev_month_return_rate, return_rate_change')
-      .gte('period_date', since.toISOString().slice(0, 10))
-      .order('period_date', { ascending: true })
+    // Paginated — same PostgREST 1000-row default cap already fixed
+    // elsewhere (see customers.ts's getCustomerTierSummary()).
+    const PAGE_SIZE = 1000
+    const data: { period_date: string; year: number; month: number; total_orders: number; returned_orders: number }[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await supabase
+        .from('mart_return_rates')
+        .select('period_date, year, month, total_orders, returned_orders')
+        .gte('period_date', since.toISOString().slice(0, 10))
+        .order('period_date', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (error || !data) return []
+      if (error) return []
+      if (!page || page.length === 0) break
+      data.push(...page)
+      if (page.length < PAGE_SIZE) break
+    }
 
-    const byPeriod = new Map<
-      string,
-      { year: number; month: number; total_orders: number; returned_orders: number; rrSum: number; prevSum: number; changeSum: number; n: number }
-    >()
+    // return_rate is derived from summed returned_orders/total_orders (a
+    // true weighted rate) — averaging each product's own return_rate
+    // directly weighted a 1-order product the same as a 100-order one,
+    // and disagreed with the "Total Returned Orders" KPI shown next to it.
+    const byPeriod = new Map<string, { year: number; month: number; total_orders: number; returned_orders: number }>()
     for (const row of data) {
       const existing = byPeriod.get(row.period_date)
       if (existing) {
         existing.total_orders += Number(row.total_orders ?? 0)
         existing.returned_orders += Number(row.returned_orders ?? 0)
-        existing.rrSum += Number(row.return_rate ?? 0)
-        existing.prevSum += Number(row.prev_month_return_rate ?? 0)
-        existing.changeSum += Number(row.return_rate_change ?? 0)
-        existing.n += 1
       } else {
         byPeriod.set(row.period_date, {
           year: row.year,
           month: row.month,
           total_orders: Number(row.total_orders ?? 0),
           returned_orders: Number(row.returned_orders ?? 0),
-          rrSum: Number(row.return_rate ?? 0),
-          prevSum: Number(row.prev_month_return_rate ?? 0),
-          changeSum: Number(row.return_rate_change ?? 0),
-          n: 1,
         })
       }
     }
@@ -86,9 +87,7 @@ export async function getReturnTrends(months: number = 6): Promise<ReturnTrend[]
         month: v.month,
         total_orders: v.total_orders,
         returned_orders: v.returned_orders,
-        return_rate: v.n > 0 ? v.rrSum / v.n : 0,
-        prev_month_return_rate: v.n > 0 ? v.prevSum / v.n : null,
-        return_rate_change: v.n > 0 ? v.changeSum / v.n : null,
+        return_rate: v.total_orders > 0 ? v.returned_orders / v.total_orders : 0,
       }))
       .sort((a, b) => a.period_date.localeCompare(b.period_date))
   } catch {
@@ -102,28 +101,35 @@ export async function getReturnsByCategory(days: number = 90): Promise<ReturnsBy
     const since = new Date()
     since.setDate(since.getDate() - days)
 
-    const { data, error } = await supabase
-      .from('mart_return_rates')
-      .select('category, total_orders, returned_orders, return_rate')
-      .gte('period_date', since.toISOString().slice(0, 10))
+    // Paginated — see getReturnTrends() above for why.
+    const PAGE_SIZE = 1000
+    const data: { category: string | null; total_orders: number; returned_orders: number }[] = []
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await supabase
+        .from('mart_return_rates')
+        .select('category, total_orders, returned_orders')
+        .gte('period_date', since.toISOString().slice(0, 10))
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (error || !data) return []
+      if (error) return []
+      if (!page || page.length === 0) break
+      data.push(...page)
+      if (page.length < PAGE_SIZE) break
+    }
 
-    const byCategory = new Map<string, { total_orders: number; returned_orders: number; rrSum: number; n: number }>()
+    // Weighted rate (returned_orders/total_orders), not an average of
+    // per-product rates — same fix as getReturnTrends() above.
+    const byCategory = new Map<string, { total_orders: number; returned_orders: number }>()
     for (const row of data) {
       const key = row.category ?? 'Unknown'
       const existing = byCategory.get(key)
       if (existing) {
         existing.total_orders += Number(row.total_orders ?? 0)
         existing.returned_orders += Number(row.returned_orders ?? 0)
-        existing.rrSum += Number(row.return_rate ?? 0)
-        existing.n += 1
       } else {
         byCategory.set(key, {
           total_orders: Number(row.total_orders ?? 0),
           returned_orders: Number(row.returned_orders ?? 0),
-          rrSum: Number(row.return_rate ?? 0),
-          n: 1,
         })
       }
     }
@@ -133,7 +139,7 @@ export async function getReturnsByCategory(days: number = 90): Promise<ReturnsBy
         category,
         total_orders: v.total_orders,
         returned_orders: v.returned_orders,
-        return_rate: v.n > 0 ? v.rrSum / v.n : 0,
+        return_rate: v.total_orders > 0 ? v.returned_orders / v.total_orders : 0,
       }))
       .sort((a, b) => b.return_rate - a.return_rate)
   } catch {

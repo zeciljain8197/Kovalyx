@@ -246,10 +246,24 @@ def validate_table(context, table: str, df: pd.DataFrame) -> dict:
     return run_expectations(validator, suite)
 
 
-def check_freshness(events_df: pd.DataFrame, bucket: str, prefix: str) -> tuple[bool, str]:
+def check_freshness(events_df: pd.DataFrame, bucket: str, prefix: str, target_date: str) -> tuple[bool, str]:
     """Custom freshness check (outside GE): fails if the most recent
     event_timestamp in the events partition is more than
-    FRESHNESS_SLA_HOURS old, or the partition is missing entirely."""
+    FRESHNESS_SLA_HOURS old, or the partition is missing entirely.
+
+    kafka_producer.py deliberately pins event_timestamp's *date* to
+    target_date (== the DAG run's {{ ds }}) while keeping the real
+    time-of-day, so Bronze writes and Silver reads agree on which
+    partition they're working with regardless of retry/wall-clock drift
+    (see iso_timestamp_ms()'s docstring). For the run whose data
+    interval crosses midnight, {{ ds }} is "yesterday" even though the
+    task executes today — comparing that pinned timestamp against a
+    real, unpinned datetime.now() would then show a bogus ~24h age and
+    fail this check every single day regardless of how fresh the data
+    actually is. The reference "now" here is pinned to the same
+    target_date for an apples-to-apples comparison, so only genuine
+    elapsed time (not the deliberate date offset) can trip the SLA.
+    """
     if events_df.empty:
         return False, f"No Silver events partition found at s3://{bucket}/{prefix}"
     if "event_timestamp" not in events_df.columns:
@@ -259,7 +273,12 @@ def check_freshness(events_df: pd.DataFrame, bucket: str, prefix: str) -> tuple[
     if most_recent is pd.NaT:
         return False, "All event_timestamp values are null in the Silver events partition"
     most_recent_utc = most_recent.tz_localize("UTC") if most_recent.tzinfo is None else most_recent.tz_convert("UTC")
-    age = datetime.now(timezone.utc) - most_recent_utc.to_pydatetime()
+
+    pinned_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+    reference_now = datetime.now(timezone.utc).replace(
+        year=pinned_date.year, month=pinned_date.month, day=pinned_date.day
+    )
+    age = reference_now - most_recent_utc.to_pydatetime()
 
     if age > timedelta(hours=FRESHNESS_SLA_HOURS):
         return False, f"Most recent event_timestamp {most_recent_utc.isoformat()} is {age} old (> {FRESHNESS_SLA_HOURS}h SLA)"
@@ -368,7 +387,7 @@ def main() -> int:
             any_failed = True
 
     events_prefix = TABLE_CONFIG["events"]["prefix_template"].format(date=target_date)
-    is_fresh, freshness_message = check_freshness(events_df if events_df is not None else pd.DataFrame(), SILVER_BUCKET, events_prefix)
+    is_fresh, freshness_message = check_freshness(events_df if events_df is not None else pd.DataFrame(), SILVER_BUCKET, events_prefix, target_date)
     if not is_fresh:
         logger.warning("Freshness check failed: %s", freshness_message)
         write_ge_result(

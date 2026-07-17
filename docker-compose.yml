@@ -183,6 +183,14 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+    # Was previously unset (Docker's default, "no") — a real outage this
+    # session traced back to exactly that: Kafka crashed once on a
+    # ZooKeeper ephemeral-node registration race during a whole-stack
+    # restart (NodeExistsException — the old broker session hadn't
+    # expired yet) and then simply stayed dead, since nothing restarted
+    # it, silently failing every DAG run's first task until found and
+    # fixed manually.
+    restart: unless-stopped
 
   kafka-exporter:
     image: danielqsj/kafka-exporter:latest
@@ -200,6 +208,7 @@ services:
       - kovalyx_bronze_net
     ports:
       - "127.0.0.1:9308:9308"
+    restart: unless-stopped
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.6.0

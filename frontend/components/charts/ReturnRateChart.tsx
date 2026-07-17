@@ -54,12 +54,18 @@ export function ReturnRateChart({ data }: ReturnRateChartProps) {
         <YAxis yAxisId="left" tickFormatter={formatPct} stroke={theme.axis} fontSize={12} />
         <YAxis yAxisId="right" orientation="right" stroke={theme.axis} fontSize={12} />
         <Tooltip content={<ReturnRateTooltip />} />
+        {/* 10% is a commonly-cited general e-commerce return-rate
+            benchmark. A 5% line previously sat below every real month
+            on record (8.9-10.9%), making it a permanently-failing,
+            uninformative reference — same calibration-against-real-data
+            issue already fixed for the inventory alerts and retention
+            heatmap. */}
         <ReferenceLine
           yAxisId="left"
-          y={0.05}
+          y={0.1}
           stroke="#9ca3af"
           strokeDasharray="4 4"
-          label={{ value: '5% threshold', position: 'insideTopRight', fill: '#9ca3af', fontSize: 11 }}
+          label={{ value: '10% benchmark', position: 'insideTopRight', fill: '#9ca3af', fontSize: 11 }}
         />
         <Bar yAxisId="right" dataKey="returned_orders" fill="#f87171" fillOpacity={0.3} />
         <Line yAxisId="left" type="monotone" dataKey="return_rate" stroke="#ef4444" strokeWidth={2} dot={false} />

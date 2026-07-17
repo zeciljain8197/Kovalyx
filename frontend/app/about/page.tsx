@@ -20,30 +20,22 @@ const TECH_STACK_TABLE: { layer: string; technologies: string }[] = [
   { layer: 'Infrastructure', technologies: 'Docker Compose, Nginx, Vercel, Supabase, GitHub Actions' },
 ]
 
-const QUESTIONS: { q: string; a: string }[] = [
+const DESIGN_DECISIONS: { title: string; body: string }[] = [
   {
-    q: 'Where did the data come from?',
-    a: 'A Kafka producer generates realistic retail events (orders, returns, inventory movements) with Faker, streamed live into the kovalyx.events topic. A batch CSV seed set covers historical backfill. Both land in the same Bronze object-store layer.',
+    title: 'Data Flow & Ingestion',
+    body: 'A Kafka producer generates realistic retail events (orders, returns, inventory movements) with Faker, streamed live into the kovalyx.events topic, with a batch CSV seed set covering historical backfill. Both land in the same Bronze object-store layer, then move Kafka Consumer → MinIO Bronze → PySpark Silver transform → Postgres staging loader → dbt marts → Supabase Gold. Every hop is orchestrated by Airflow on a fixed schedule, not triggered ad hoc.',
   },
   {
-    q: 'How did you move it?',
-    a: 'Kafka Consumer → MinIO Bronze → PySpark Silver transform → Postgres staging loader → dbt marts → Supabase Gold. Every hop is orchestrated by Airflow on a fixed schedule, not triggered ad hoc.',
+    title: 'Storage Strategy',
+    body: 'MinIO (S3-compatible) for cheap, schema-less Bronze landing; Postgres for structured Silver/staging; Supabase Postgres for Gold, because the dashboard needs a queryable relational store with row-level security, not a data lake.',
   },
   {
-    q: 'Where did you store it, and why?',
-    a: "MinIO (S3-compatible) for cheap, schema-less Bronze landing; Postgres for structured Silver/staging; Supabase Postgres for Gold, because the dashboard needs a queryable relational store with row-level security, not a data lake.",
+    title: 'Data Modeling',
+    body: 'dbt staging models clean and type raw loader output; mart models apply a Kimball star schema (fact tables for orders/returns/inventory snapshots, dimension tables for products/customers/dates) so the dashboard queries are simple aggregations, not ad hoc joins.',
   },
   {
-    q: 'How did you model it?',
-    a: 'dbt staging models clean and type raw loader output; mart models apply a Kimball star schema (fact tables for orders/returns/inventory snapshots, dimension tables for products/customers/dates) so the dashboard queries are simple aggregations, not ad hoc joins.',
-  },
-  {
-    q: 'How did you ensure quality?',
-    a: 'Great Expectations checkpoints run against every Silver batch before it is allowed to reach Postgres staging — null checks, referential checks, and value-range checks. Failed checkpoints block the load; results are logged and visible on the Pipeline Health page.',
-  },
-  {
-    q: 'How did you make this production-like on a single VM?',
-    a: 'Every credential is issued by HashiCorp Vault via least-privilege AppRole policies — nothing is hardcoded. PII (names, emails, phone numbers) is masked by Presidio NER + deterministic hashing at the Silver layer, before it can ever reach an analyst or a dashboard. Docker network isolation keeps each layer from talking to services it has no reason to reach. The whole pipeline is designed to run self-hosted on a single small VM via one `docker compose up` — the dashboard you\'re looking at is deployed separately, for free, on Vercel + Supabase.',
+    title: 'Quality Assurance',
+    body: 'Great Expectations checkpoints run against every Silver batch before it is allowed to reach Postgres staging — null checks, referential checks, and value-range checks. Failed checkpoints block the load; results are logged and visible on the Pipeline Health page.',
   },
 ]
 
@@ -132,21 +124,16 @@ export default function AboutPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">How It's Built</h2>
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Design Decisions</h2>
         <p className="max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-          The engineering decisions behind the pipeline above, in more depth.
+          The reasoning behind the pipeline architecture above, in more depth.
         </p>
-        <div className="max-w-3xl space-y-2">
-          {QUESTIONS.map((item) => (
-            <details
-              key={item.q}
-              className="group rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"
-            >
-              <summary className="cursor-pointer text-sm font-medium text-gray-800 marker:text-kovalyx-blueText dark:text-gray-200 dark:marker:text-kovalyx-blue">
-                {item.q}
-              </summary>
-              <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{item.a}</p>
-            </details>
+        <div className="max-w-3xl space-y-4">
+          {DESIGN_DECISIONS.map((item) => (
+            <div key={item.title}>
+              <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{item.body}</p>
+            </div>
           ))}
         </div>
       </section>

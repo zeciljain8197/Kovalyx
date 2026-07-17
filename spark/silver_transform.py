@@ -448,8 +448,16 @@ def main() -> int:
     spark = build_spark_session(minio_endpoint, minio_access_key, minio_secret_key)
     masker = PresidioMasker(run_id=args.run_id, jdbc_url=jdbc_url, jdbc_props=jdbc_props)
 
+    # records_failed is a row-count metric (rows dropped for a null key)
+    # and must stay one — mixing in a flat "+= 1" per whole-table
+    # exception made it an incoherent unit (indistinguishable "37 rows
+    # dropped" from "1 table failed"). Whole-table failures are tracked
+    # separately in failed_tables and affect the final `status` below
+    # instead, since a failed table means real missing Silver output —
+    # that's a pipeline-level failure, not a per-row data-quality drop.
     records_processed = 0
     records_failed = 0
+    failed_tables: list[str] = []
 
     try:
         try:
@@ -463,7 +471,7 @@ def main() -> int:
                 records_failed_metric.labels(table="events", reason="null_key").inc(ev_dropped)
         except Exception:  # noqa: BLE001
             logger.exception("Streaming events transform failed — continuing with remaining tables")
-            records_failed += 1
+            failed_tables.append("events")
             records_failed_metric.labels(table="events", reason="transform_exception").inc(1)
 
         try:
@@ -475,7 +483,7 @@ def main() -> int:
             records_processed_metric.labels(table="customers").inc(written)
         except Exception:  # noqa: BLE001
             logger.exception("Customers transform failed — continuing with remaining tables")
-            records_failed += 1
+            failed_tables.append("customers")
             records_failed_metric.labels(table="customers", reason="transform_exception").inc(1)
 
         try:
@@ -490,7 +498,7 @@ def main() -> int:
                 records_failed_metric.labels(table="products", reason="null_key").inc(prod_dropped)
         except Exception:  # noqa: BLE001
             logger.exception("Products transform failed — continuing with remaining tables")
-            records_failed += 1
+            failed_tables.append("products")
             records_failed_metric.labels(table="products", reason="transform_exception").inc(1)
 
         try:
@@ -502,7 +510,7 @@ def main() -> int:
             records_processed_metric.labels(table="orders").inc(written)
         except Exception:  # noqa: BLE001
             logger.exception("Orders transform failed — continuing with remaining tables")
-            records_failed += 1
+            failed_tables.append("orders")
             records_failed_metric.labels(table="orders", reason="transform_exception").inc(1)
 
         try:
@@ -517,7 +525,7 @@ def main() -> int:
                 records_failed_metric.labels(table="inventory", reason="null_key").inc(inv_dropped)
         except Exception:  # noqa: BLE001
             logger.exception("Inventory transform failed — continuing with remaining tables")
-            records_failed += 1
+            failed_tables.append("inventory")
             records_failed_metric.labels(table="inventory", reason="transform_exception").inc(1)
 
         masker.flush_audit_log(spark)
@@ -525,6 +533,7 @@ def main() -> int:
 
         end_time = datetime.now(timezone.utc)
         duration_metric.set((end_time - start_time).total_seconds())
+        status = "failed" if failed_tables else "success"
         write_pipeline_audit_log(
             pg_conn_params,
             run_id=args.run_id,
@@ -533,19 +542,21 @@ def main() -> int:
             records_processed=records_processed,
             records_failed=records_failed,
             pii_events_masked=masker.get_masked_count(),
-            status="success",
+            status=status,
         )
         push_metrics(registry)
 
         logger.info(
-            "Silver transform complete: run_id=%s date=%s processed=%d failed=%d pii_masked=%d",
+            "Silver transform complete: run_id=%s date=%s status=%s processed=%d row_dropped=%d failed_tables=%s pii_masked=%d",
             args.run_id,
             target_date,
+            status,
             records_processed,
             records_failed,
+            failed_tables or "none",
             masker.get_masked_count(),
         )
-        return 0
+        return 1 if failed_tables else 0
 
     except Exception:  # noqa: BLE001
         logger.exception("Unhandled failure in Silver transform job (run_id=%s)", args.run_id)
