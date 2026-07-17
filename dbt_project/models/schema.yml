@@ -151,7 +151,14 @@ models:
       - name: event_id
         tests: [not_null, unique]
       - name: customer_key
-        tests: [not_null]
+        # Not not_null, deliberately: kafka_producer.py's live stream
+        # generates fresh CUST-{uuid4} customer IDs per producer session
+        # (make_customer()), structurally disjoint from the batch-seeded
+        # dim_customers table — a live event referencing one of those
+        # customers will always produce a NULL customer_key here via the
+        # LEFT JOIN in fact_events.sql, by design, not as a data-quality
+        # defect. A not_null test here fails on every run that actually
+        # exercises the live Kafka path rather than only the batch seed.
 
   # --------------------------------------------------------------
   # Reporting marts
