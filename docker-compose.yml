@@ -361,6 +361,17 @@ services:
     container_name: kovalyx-spark-master
     environment:
       SPARK_MODE: master
+      # Without this, the Bitnami image derives --host from the
+      # container's own hostname lookup, which resolves to exactly one
+      # of this container's three network IPs (it's attached to
+      # kovalyx_bronze_net/silver_net/gold_net). The master's RPC
+      # listener then only accepts connections on that one IP — but
+      # Docker's per-network DNS resolves "spark-master" to a
+      # *different* IP for a container querying from a different one of
+      # those three networks, so spark-worker's "connection refused"
+      # wasn't a crash, it was resolving to an IP nothing was listening
+      # on. Binding to all interfaces removes the ambiguity.
+      SPARK_MASTER_HOST: 0.0.0.0
       SPARK_RPC_AUTHENTICATION_ENABLED: "no"
       SPARK_RPC_ENCRYPTION_ENABLED: "no"
     ports:
@@ -396,8 +407,18 @@ services:
       SPARK_WORKER_CORES: 2
       SPARK_RPC_AUTHENTICATION_ENABLED: "no"
       SPARK_RPC_ENCRYPTION_ENABLED: "no"
+    # depends_on's bare list form only waits for spark-master's container
+    # to start, not for its master RPC listener on :7077 to actually
+    # accept connections — a real outage this session traced back to
+    # exactly that gap: on a whole-stack restart, the worker exhausted
+    # its connection retry budget before spark-master (which has a real
+    # healthcheck below) was ready, gave up permanently ("All masters
+    # are unresponsive!"), and — with no restart policy either — just
+    # stayed dead, failing every Silver transform task until found and
+    # restarted manually. Same failure shape as the kafka outage.
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
     volumes:
       - ./spark:/opt/kovalyx/spark
       - ./spark/metrics.properties:/opt/bitnami/spark/conf/metrics.properties:ro
@@ -405,6 +426,7 @@ services:
       - kovalyx_bronze_net
       - kovalyx_silver_net
       - kovalyx_gold_net
+    restart: unless-stopped
 
   postgres-metadata:
     image: postgres:16-alpine
